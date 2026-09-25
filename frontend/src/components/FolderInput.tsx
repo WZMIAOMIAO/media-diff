@@ -1,0 +1,77 @@
+import { useEffect, useState } from 'react';
+import BrowseFolderDialog from './BrowseFolderDialog';
+import { getDefaultBrowsePath } from '../api';
+import type { AddRootResult } from '../hooks/useFolderTree';
+
+interface FolderInputProps {
+  onAddRoot: (path: string) => Promise<AddRootResult>;
+}
+
+function FolderInput({ onAddRoot }: FolderInputProps) {
+  const [value, setValue] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [defaultPath, setDefaultPath] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDefaultBrowsePath()
+      .then((p) => {
+        if (!cancelled) setDefaultPath(p);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const addPath = async (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    const result = await onAddRoot(trimmed);
+    if (result === 'not_exist') {
+      alert('文件夹不存在');
+    } else if (result === 'exists') {
+      alert('该路径已添加');
+    } else {
+      setValue('');
+    }
+  };
+
+  const submit = () => void addPath(value);
+
+  return (
+    <div className="p-2 border-b border-[#3c3c3c]">
+      <div className="flex items-center gap-1">
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void submit();
+          }}
+          placeholder="输入文件夹路径后回车..."
+          className="flex-1 min-w-0 px-2 py-1 text-sm bg-[#333333] border border-[#3c3c3c] rounded text-[#e0e0e0] placeholder:text-[#888888] focus:outline-none focus:border-[#555555]"
+        />
+        <button
+          type="button"
+          onClick={() => setDialogOpen(true)}
+          title="浏览文件夹"
+          className="shrink-0 px-2 py-1 text-sm bg-[#333333] border border-[#3c3c3c] rounded hover:border-[#555555]"
+        >
+          📁
+        </button>
+      </div>
+      {dialogOpen && (
+        <BrowseFolderDialog
+          defaultPath={defaultPath}
+          onClose={() => setDialogOpen(false)}
+          onSelect={async (path) => {
+            setDialogOpen(false);
+            await addPath(path);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+export default FolderInput;
