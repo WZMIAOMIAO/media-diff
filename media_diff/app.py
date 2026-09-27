@@ -84,4 +84,5 @@ if __name__ == "__main__":
         host=os.environ.get("MEDIA_DIFF_HOST", "127.0.0.1"),
         port=int(os.environ.get("MEDIA_DIFF_PORT", "8000")),
         reload=True,
+        timeout_graceful_shutdown=5,
     )

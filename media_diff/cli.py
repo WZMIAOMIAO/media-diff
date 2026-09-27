@@ -14,6 +14,12 @@ import uvicorn
 
 from media_diff import __version__, registry
 
+# Uvicorn waits indefinitely for in-flight connections during a graceful
+# shutdown by default. The browser keeps video-stream / keep-alive sockets open,
+# so on Ctrl+C the server would print "Shutting down" and then hang forever.
+# Force the shutdown after a short grace period instead.
+SHUTDOWN_TIMEOUT_SECONDS = 5
+
 
 @contextlib.contextmanager
 def _suppress_stderr():
@@ -288,7 +294,10 @@ def _start_server(args: argparse.Namespace) -> None:
             host=args.host,
             port=args.port,
             reload=args.reload,
+            timeout_graceful_shutdown=SHUTDOWN_TIMEOUT_SECONDS,
         )
+    except KeyboardInterrupt:  # pragma: no cover - interactive Ctrl+C
+        pass
     finally:
         registry.unregister(os.getpid(), args.port)
         _restore_tty(saved_tty)

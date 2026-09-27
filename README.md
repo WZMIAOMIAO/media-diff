@@ -59,6 +59,8 @@ media-diff
 
 也可用模块方式启动：`python -m media_diff`。
 
+在前台运行时按 `Ctrl+C` 停止；服务会最多等待 5 秒让浏览器中未完成的连接（如视频流）关闭，随后强制退出，不会卡在 "Shutting down"。
+
 ### 查看与停止运行中的服务
 
 ```bash
