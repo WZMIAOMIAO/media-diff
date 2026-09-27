@@ -1,20 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listImages, voteBlindEval, type FileEntry } from '../api';
-import type { BlindSetupResult, SelectedFolder } from '../types';
+import type { BlindEvalApi, BlindSetupResult, SelectedFolder } from '../types';
 
-export interface BlindEvalApi {
-  aliases: Record<string, string>;
-  order: string[];
-  displayOrders: Record<string, number[]>;
-  outputPath: string;
-  index: number;
-  total: number;
-  /** image name -> winning alias */
-  votes: Map<string, string>;
-  votedCount: number;
-  setIndex: (index: number) => void;
-  vote: (name: string, alias: string | null) => Promise<void>;
-}
+export type { BlindEvalApi } from '../types';
 
 interface BlindRuntime {
   aliases: Record<string, string>;
@@ -67,6 +55,11 @@ function getPathName(path: string): string {
   const idx = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
   if (idx === -1) return trimmed;
   return trimmed.substring(idx + 1);
+}
+
+function normalizePath(path: string): string {
+  const unified = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  return unified || '/';
 }
 
 function winListsFromData(
@@ -396,8 +389,18 @@ export function useImageCompare(): UseImageCompareReturn {
 
   const enterBlind = useCallback(
     (result: BlindSetupResult) => {
+      // Backend aliases are keyed by normalized paths; remap them onto the
+      // exact folder paths currently held by the compare state.
+      const aliasByNorm = new Map(
+        Object.entries(result.aliases).map(([k, v]) => [normalizePath(k), v]),
+      );
+      const aliases: Record<string, string> = {};
+      for (const f of foldersRef.current) {
+        aliases[f.path] =
+          aliasByNorm.get(normalizePath(f.path)) ?? result.aliases[f.path] ?? '';
+      }
       blindRef.current = {
-        aliases: result.aliases,
+        aliases,
         order: result.common_files,
         displayOrders: result.display_orders,
         outputPath: result.output_path,

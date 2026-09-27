@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { voteBlindEval } from '../../api';
 import { getVideoInfo, listVideos } from '../../api/video';
 import type { VideoEntry, VideoInfo } from '../../types/video';
-import type { SelectedFolder } from '../../types';
+import type { BlindEvalApi, BlindSetupResult, SelectedFolder } from '../../types';
 
 export interface UseVideoCompareReturn {
   selectedFolders: SelectedFolder[];
@@ -26,6 +27,30 @@ export interface UseVideoCompareReturn {
   setSearchQuery: (q: string) => void;
   intersectionMode: boolean;
   setIntersectionMode: (b: boolean) => void;
+
+  blind: BlindEvalApi | null;
+  enterBlind: (result: BlindSetupResult) => void;
+  exitBlind: () => void;
+}
+
+interface BlindRuntime {
+  aliases: Record<string, string>;
+  order: string[];
+  displayOrders: Record<string, number[]>;
+  outputPath: string;
+  winLists: Record<string, string[]>;
+}
+
+function winListsFromData(
+  data: Record<string, unknown>,
+  aliases: Record<string, string>,
+): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+  for (const alias of new Set(Object.values(aliases))) {
+    const value = data[`${alias}_win_list`];
+    result[alias] = Array.isArray(value) ? (value as string[]) : [];
+  }
+  return result;
 }
 
 function getPathName(path: string): string {
@@ -66,6 +91,10 @@ export function useVideoCompare(): UseVideoCompareReturn {
   const [searchQuery, setSearchQuery] = useState('');
   const [intersectionMode, setIntersectionModeState] = useState(false);
 
+  const blindRef = useRef<BlindRuntime | null>(null);
+  const blindIndexRef = useRef(0);
+  const prevModeRef = useRef<{ intersectionMode: boolean; searchQuery: string } | null>(null);
+
   const selectedFolders = foldersRef.current;
   const videosPerFolder = videosRef.current;
   const currentVideoIndices = indicesRef.current;
@@ -74,6 +103,21 @@ export function useVideoCompare(): UseVideoCompareReturn {
   const filteredVideos = useMemo(() => {
     const map = new Map<string, VideoEntry[]>();
     const q = searchQuery.trim().toLowerCase();
+    const blind = blindRef.current;
+
+    if (blind) {
+      for (const f of foldersRef.current) {
+        const vids = videosRef.current.get(f.path) ?? [];
+        const byName = new Map(vids.map((v) => [v.name, v] as const));
+        let list = blind.order
+          .map((n) => byName.get(n))
+          .filter((x): x is VideoEntry => x !== undefined);
+        if (q) list = list.filter((v) => v.name.toLowerCase().includes(q));
+        map.set(f.path, list);
+      }
+      return map;
+    }
+
     let intersectionNames: Set<string> | null = null;
     if (intersectionMode && foldersRef.current.length >= 2) {
       for (const f of foldersRef.current) {
@@ -105,6 +149,16 @@ export function useVideoCompare(): UseVideoCompareReturn {
 
   const filteredVideosRef = useRef(filteredVideos);
   filteredVideosRef.current = filteredVideos;
+
+  // 将每个文件夹的索引对齐到当前盲评组编号。
+  const applyBlindIndex = useCallback(() => {
+    const next = new Map<string, number>();
+    for (const f of foldersRef.current) {
+      const len = filteredVideosRef.current.get(f.path)?.length ?? 0;
+      next.set(f.path, len === 0 ? 0 : Math.min(blindIndexRef.current, len - 1));
+    }
+    indicesRef.current = next;
+  }, []);
 
   useEffect(() => {
     let changed = false;
@@ -164,6 +218,10 @@ export function useVideoCompare(): UseVideoCompareReturn {
 
   const addFolder = useCallback(
     async (path: string) => {
+      if (blindRef.current) {
+        alert('盲评模式下请先退出盲评再添加对比目录');
+        return;
+      }
       const trimmed = path.trim();
       if (!trimmed) return;
       if (foldersRef.current.length >= 4) {
@@ -195,6 +253,10 @@ export function useVideoCompare(): UseVideoCompareReturn {
 
   const removeFolder = useCallback(
     (path: string) => {
+      if (blindRef.current) {
+        alert('盲评模式下请先退出盲评再删除对比目录');
+        return;
+      }
       foldersRef.current = foldersRef.current.filter((f) => f.path !== path);
       const next = new Map(videosRef.current);
       next.delete(path);
@@ -214,6 +276,10 @@ export function useVideoCompare(): UseVideoCompareReturn {
   );
 
   const clearFolders = useCallback(() => {
+    if (blindRef.current) {
+      alert('盲评模式下请先退出盲评再清除对比目录');
+      return;
+    }
     foldersRef.current = [];
     videosRef.current = new Map();
     indicesRef.current = new Map();
@@ -225,6 +291,12 @@ export function useVideoCompare(): UseVideoCompareReturn {
 
   const setCurrentVideoIndex = useCallback(
     (folderPath: string, idx: number) => {
+      if (blindRef.current) {
+        blindIndexRef.current = idx;
+        applyBlindIndex();
+        forceUpdate();
+        return;
+      }
       const l = filteredVideosRef.current.get(folderPath) ?? [];
       const clamped = l.length === 0 ? 0 : Math.max(0, Math.min(idx, l.length - 1));
       const next = new Map(indicesRef.current);
@@ -232,10 +304,18 @@ export function useVideoCompare(): UseVideoCompareReturn {
       indicesRef.current = next;
       forceUpdate();
     },
-    [forceUpdate],
+    [applyBlindIndex, forceUpdate],
   );
 
   const nextVideo = useCallback(() => {
+    if (blindRef.current) {
+      const total = blindRef.current.order.length;
+      if (blindIndexRef.current >= total - 1) return;
+      blindIndexRef.current += 1;
+      applyBlindIndex();
+      forceUpdate();
+      return;
+    }
     let changed = false;
     const next = new Map(indicesRef.current);
     for (const f of foldersRef.current) {
@@ -251,9 +331,16 @@ export function useVideoCompare(): UseVideoCompareReturn {
     if (!changed) return;
     indicesRef.current = next;
     forceUpdate();
-  }, [forceUpdate]);
+  }, [applyBlindIndex, forceUpdate]);
 
   const prevVideo = useCallback(() => {
+    if (blindRef.current) {
+      if (blindIndexRef.current <= 0) return;
+      blindIndexRef.current -= 1;
+      applyBlindIndex();
+      forceUpdate();
+      return;
+    }
     let changed = false;
     const next = new Map(indicesRef.current);
     for (const f of foldersRef.current) {
@@ -269,10 +356,19 @@ export function useVideoCompare(): UseVideoCompareReturn {
     if (!changed) return;
     indicesRef.current = next;
     forceUpdate();
-  }, [forceUpdate]);
+  }, [applyBlindIndex, forceUpdate]);
 
   const alignByIndex = useCallback(
     (idx: number) => {
+      if (blindRef.current) {
+        blindIndexRef.current = Math.max(
+          0,
+          Math.min(idx, blindRef.current.order.length - 1),
+        );
+        applyBlindIndex();
+        forceUpdate();
+        return;
+      }
       const next = new Map(indicesRef.current);
       for (const f of foldersRef.current) {
         const l = filteredVideosRef.current.get(f.path) ?? [];
@@ -285,13 +381,22 @@ export function useVideoCompare(): UseVideoCompareReturn {
       indicesRef.current = next;
       forceUpdate();
     },
-    [forceUpdate],
+    [applyBlindIndex, forceUpdate],
   );
 
   const alignByName = useCallback(
     (folderPath: string, videoName: string) => {
       const list = filteredVideosRef.current.get(folderPath);
       if (!list || !videoName) return;
+      if (blindRef.current) {
+        const idx = list.findIndex((v) => v.name === videoName);
+        if (idx >= 0) {
+          blindIndexRef.current = idx;
+          applyBlindIndex();
+          forceUpdate();
+        }
+        return;
+      }
       const srcIdx = list.findIndex((v) => v.name === videoName);
       if (srcIdx < 0) return;
       const next = new Map(indicesRef.current);
@@ -308,10 +413,11 @@ export function useVideoCompare(): UseVideoCompareReturn {
       indicesRef.current = next;
       forceUpdate();
     },
-    [forceUpdate],
+    [applyBlindIndex, forceUpdate],
   );
 
   const setIntersectionMode = useCallback((b: boolean) => {
+    if (blindRef.current) return;
     if (b && foldersRef.current.length < 2) return;
     setIntersectionModeState(b);
   }, []);
@@ -321,6 +427,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
   // been added to the compare list. Returns true if a jump happened.
   const selectVideoByPath = useCallback(
     (videoPath: string): boolean => {
+      if (blindRef.current) return false;
       const parent = normalizePath(getParentPath(videoPath));
       const folder = foldersRef.current.find(
         (f) => normalizePath(f.path) === parent,
@@ -337,6 +444,96 @@ export function useVideoCompare(): UseVideoCompareReturn {
     },
     [forceUpdate],
   );
+
+  const enterBlind = useCallback(
+    (result: BlindSetupResult) => {
+      const aliasByNorm = new Map(
+        Object.entries(result.aliases).map(([k, v]) => [normalizePath(k), v]),
+      );
+      const aliases: Record<string, string> = {};
+      for (const f of foldersRef.current) {
+        aliases[f.path] =
+          aliasByNorm.get(normalizePath(f.path)) ?? result.aliases[f.path] ?? '';
+      }
+      blindRef.current = {
+        aliases,
+        order: result.common_files,
+        displayOrders: result.display_orders,
+        outputPath: result.output_path,
+        winLists: result.win_lists,
+      };
+      prevModeRef.current = { intersectionMode, searchQuery };
+      setIntersectionModeState(false);
+      setSearchQuery('');
+      blindIndexRef.current = 0;
+      applyBlindIndex();
+      forceUpdate();
+    },
+    [applyBlindIndex, forceUpdate, intersectionMode, searchQuery],
+  );
+
+  const exitBlind = useCallback(() => {
+    if (!blindRef.current) return;
+    blindRef.current = null;
+    const prev = prevModeRef.current;
+    if (prev) {
+      setIntersectionModeState(prev.intersectionMode);
+      setSearchQuery(prev.searchQuery);
+    }
+    prevModeRef.current = null;
+    blindIndexRef.current = 0;
+    const next = new Map<string, number>();
+    for (const f of foldersRef.current) next.set(f.path, 0);
+    indicesRef.current = next;
+    forceUpdate();
+  }, [forceUpdate]);
+
+  const vote = useCallback(
+    async (name: string, alias: string | null) => {
+      const blind = blindRef.current;
+      if (!blind) return;
+      try {
+        const data = await voteBlindEval(blind.outputPath, name, alias);
+        blind.winLists = winListsFromData(data, blind.aliases);
+        forceUpdate();
+      } catch (e) {
+        alert(e instanceof Error ? e.message : '保存投票失败');
+      }
+    },
+    [forceUpdate],
+  );
+
+  const blindSetIndex = useCallback(
+    (index: number) => {
+      const total = blindRef.current?.order.length ?? 0;
+      if (total === 0) return;
+      blindIndexRef.current = Math.max(0, Math.min(index, total - 1));
+      applyBlindIndex();
+      forceUpdate();
+    },
+    [applyBlindIndex, forceUpdate],
+  );
+
+  const blindRuntime = blindRef.current;
+  let blind: BlindEvalApi | null = null;
+  if (blindRuntime) {
+    const votes = new Map<string, string>();
+    for (const [alias, names] of Object.entries(blindRuntime.winLists)) {
+      for (const n of names) votes.set(n, alias);
+    }
+    blind = {
+      aliases: blindRuntime.aliases,
+      order: blindRuntime.order,
+      displayOrders: blindRuntime.displayOrders,
+      outputPath: blindRuntime.outputPath,
+      index: blindIndexRef.current,
+      total: blindRuntime.order.length,
+      votes,
+      votedCount: blindRuntime.order.filter((n) => votes.has(n)).length,
+      setIndex: blindSetIndex,
+      vote,
+    };
+  }
 
   return {
     selectedFolders,
@@ -358,5 +555,8 @@ export function useVideoCompare(): UseVideoCompareReturn {
     setSearchQuery,
     intersectionMode,
     setIntersectionMode,
+    blind,
+    enterBlind,
+    exitBlind,
   };
 }

@@ -98,7 +98,8 @@ export default function ImageComparePage() {
       {blindSetupOpen && (
         <BlindEvalSetupDialog
           folders={compare.selectedFolders}
-          imagesPerFolder={compare.imagesPerFolder}
+          filesPerFolder={compare.imagesPerFolder}
+          media="image"
           onEnter={(result) => {
             compare.enterBlind(result);
             setBlindSetupOpen(false);

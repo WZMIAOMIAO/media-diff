@@ -18,13 +18,18 @@ import os
 import random
 import threading
 
-from media_diff.utils.filesystem import list_images
+from media_diff.utils.filesystem import list_images, list_videos
 
 RESULT_FILENAME = "blind_review_results.json"
 ALIASES = "ABCD"
 WIN_LIST_SUFFIX = "_win_list"
 
 _LOCK = threading.Lock()
+
+_MEDIA_LISTERS = {
+    "image": list_images,
+    "video": list_videos,
+}
 
 
 class BlindEvalError(Exception):
@@ -62,13 +67,14 @@ def _validate_folder(path: str) -> str:
     return normalized
 
 
-def _names_in_folder(path: str) -> set[str]:
-    return {img["name"] for img in list_images(path)}
+def _names_in_folder(path: str, media: str = "image") -> set[str]:
+    lister = _MEDIA_LISTERS.get(media, list_images)
+    return {item["name"] for item in lister(path)}
 
 
-def common_file_names(paths: list[str]) -> list[str]:
-    """Return the sorted intersection of image file names across all folders."""
-    per_folder = [_names_in_folder(p) for p in paths]
+def common_file_names(paths: list[str], media: str = "image") -> list[str]:
+    """Return the sorted intersection of file names across all folders."""
+    per_folder = [_names_in_folder(p, media) for p in paths]
     common = set.intersection(*per_folder) if per_folder else set()
     return sorted(common)
 
@@ -139,10 +145,12 @@ def setup(
     seed: int,
     output_path: str,
     load_existing: bool = False,
+    media: str = "image",
 ) -> dict:
     """Prepare a blind evaluation session.
 
-    See the design document for the two-phase (existing / fresh) flow.
+    ``media`` selects which file names are intersected (``"image"`` or
+    ``"video"``); the rest of the flow is identical for both.
     """
     if len(paths) < 2:
         raise BlindEvalError("盲评模式需要至少2个对比文件夹")
@@ -152,7 +160,7 @@ def setup(
     normalized = [_validate_folder(p) for p in paths]
     output = resolve_output_path(output_path)
 
-    common = common_file_names(normalized)
+    common = common_file_names(normalized, media)
     if not common:
         raise BlindEvalError("没有找到文件名相同的数据，无法进行盲评")
 

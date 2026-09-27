@@ -1,20 +1,21 @@
 import { useMemo, useState } from 'react';
-import { setupBlindEval, type FileEntry } from '../api';
-import type { BlindSetupResult, SelectedFolder } from '../types';
+import { setupBlindEval } from '../api';
+import type { BlindMedia, BlindSetupResult, SelectedFolder } from '../types';
 import BrowseFolderDialog from './BrowseFolderDialog';
 
 interface BlindEvalSetupDialogProps {
   folders: SelectedFolder[];
-  imagesPerFolder: Map<string, FileEntry[]>;
+  filesPerFolder: Map<string, { name: string }[]>;
+  media: BlindMedia;
   onEnter: (result: BlindSetupResult) => void;
   onClose: () => void;
 }
 
-function intersectionCount(folders: SelectedFolder[], imagesPerFolder: Map<string, FileEntry[]>): number {
+function intersectionCount(folders: SelectedFolder[], filesPerFolder: Map<string, { name: string }[]>): number {
   if (folders.length < 2) return 0;
   let common: Set<string> | null = null;
   for (const f of folders) {
-    const names = new Set((imagesPerFolder.get(f.path) ?? []).map((i) => i.name));
+    const names = new Set((filesPerFolder.get(f.path) ?? []).map((i) => i.name));
     if (common === null) {
       common = names;
     } else {
@@ -26,7 +27,7 @@ function intersectionCount(folders: SelectedFolder[], imagesPerFolder: Map<strin
   return common ? common.size : 0;
 }
 
-function BlindEvalSetupDialog({ folders, imagesPerFolder, onEnter, onClose }: BlindEvalSetupDialogProps) {
+function BlindEvalSetupDialog({ folders, filesPerFolder, media, onEnter, onClose }: BlindEvalSetupDialogProps) {
   const [totalParts, setTotalParts] = useState('1');
   const [currentPart, setCurrentPart] = useState('1');
   const [seed, setSeed] = useState('1234');
@@ -35,9 +36,10 @@ function BlindEvalSetupDialog({ folders, imagesPerFolder, onEnter, onClose }: Bl
   const [loading, setLoading] = useState(false);
 
   const total = useMemo(
-    () => intersectionCount(folders, imagesPerFolder),
-    [folders, imagesPerFolder],
+    () => intersectionCount(folders, filesPerFolder),
+    [folders, filesPerFolder],
   );
+  const noun = media === 'video' ? '视频' : '图片';
 
   const runSetup = async (loadExisting: boolean) => {
     setLoading(true);
@@ -49,6 +51,7 @@ function BlindEvalSetupDialog({ folders, imagesPerFolder, onEnter, onClose }: Bl
         seed: Number(seed),
         output_path: outputPath.trim(),
         load_existing: loadExisting,
+        media,
       });
       if (result.existing_file_matched && !loadExisting) {
         const load = window.confirm(
@@ -82,7 +85,7 @@ function BlindEvalSetupDialog({ folders, imagesPerFolder, onEnter, onClose }: Bl
       return;
     }
     if (parts > total) {
-      alert(`划分份数不能大于图片总数（当前共 ${total} 张）`);
+      alert(`划分份数不能大于${noun}总数（当前共 ${total} 个）`);
       return;
     }
     void runSetup(false);
@@ -92,7 +95,7 @@ function BlindEvalSetupDialog({ folders, imagesPerFolder, onEnter, onClose }: Bl
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="w-[460px] flex flex-col bg-[#2b2b2b] border border-[#3c3c3c] rounded-lg shadow-xl">
         <div className="px-3 py-2 text-sm text-[#e0e0e0] border-b border-[#3c3c3c]">
-          盲评参数设置（共有同名图片 {total} 张）
+          盲评参数设置（共有同名{noun} {total} 个）
         </div>
 
         <div className="p-3 flex flex-col gap-3 text-sm">

@@ -21,12 +21,13 @@ interface VideoCompareAreaProps {
 
 interface WindowInfo {
   index: number;
+  folderPath: string;
   video: VideoEntry | null;
 }
 
 function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnabled, watermarkConfigs }: VideoCompareAreaProps) {
   const sharedZoom = useSharedZoom();
-  const { selectedFolders, currentVideos, videoInfos, nextVideo, prevVideo } = compare;
+  const { selectedFolders, filteredVideos, currentVideos, videoInfos, nextVideo, prevVideo, blind } = compare;
   const [samplePos, setSamplePos] = useState<SamplePos | null>(null);
 
   const handleSample = useCallback((pos: SamplePos | null) => {
@@ -122,22 +123,30 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
     );
   }
 
-  const allWindows: WindowInfo[] = selectedFolders.map((f, i) => ({
-    index: i,
-    video: currentVideos.get(f.path) ?? null,
-  }));
+  const blindName = blind ? blind.order[blind.index] : undefined;
+
+  const allWindows: WindowInfo[] = selectedFolders.map((f, i) => {
+    if (blind) {
+      const order = (blindName && blind.displayOrders[blindName]) || selectedFolders.map((_, k) => k);
+      const folder = selectedFolders[order[i] ?? i] ?? f;
+      const video =
+        (filteredVideos.get(folder.path) ?? []).find((v) => v.name === blindName) ?? null;
+      return { index: i, folderPath: folder.path, video };
+    }
+    return { index: i, folderPath: f.path, video: currentVideos.get(f.path) ?? null };
+  });
 
   const mainFps = videoInfos.get(selectedFolders[0].path)?.fps ?? 30;
 
   const renderWindow = (i: number) => {
-    const f = selectedFolders[i];
+    const w = allWindows[i];
     return (
       <VideoWindow
-        key={f.path}
+        key={w.folderPath}
         index={i}
-        folderPath={f.path}
-        video={currentVideos.get(f.path) ?? null}
-        videoInfo={videoInfos.get(f.path)}
+        folderPath={w.folderPath}
+        video={w.video}
+        videoInfo={videoInfos.get(w.folderPath)}
         player={player}
         sharedZoom={sharedZoom}
         histogramEnabled={histogramEnabled}
@@ -147,6 +156,19 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
         watermarkConfig={watermarkConfigs[i]}
         allWindows={allWindows}
         titlePosition={selectedFolders.length === 4 && i >= 2 ? 'bottom' : 'top'}
+        blindVote={
+          blind && blindName && w.video
+            ? {
+                alias: blind.aliases[w.folderPath] ?? '',
+                votedAlias: blind.votes.get(blindName) ?? null,
+                onVote: () => {
+                  const alias = blind.aliases[w.folderPath] ?? '';
+                  const current = blind.votes.get(blindName) ?? null;
+                  void blind.vote(blindName, current === alias ? null : alias);
+                },
+              }
+            : null
+        }
       />
     );
   };

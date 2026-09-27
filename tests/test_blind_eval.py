@@ -121,6 +121,47 @@ def test_missing_common_files_raises(tmp_path):
         blind_eval.setup([str(a), str(b)], 1, 1, 1234, str(tmp_path))
 
 
+def test_setup_video_media(tmp_path):
+    def make_videos(path, names):
+        path.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            (path / name).write_bytes(b"")
+
+    a = tmp_path / "A"
+    b = tmp_path / "B"
+    make_videos(a, ["v0.mp4", "v1.mp4", "extra.mp4"])
+    make_videos(b, ["v1.mp4", "v0.mp4"])
+    out = str(tmp_path / "blind_review_results.json")
+    result = blind_eval.setup([str(a), str(b)], 1, 1, 3, out, media="video")
+    assert sorted(result["common_files"]) == ["v0.mp4", "v1.mp4"]
+
+
+def test_api_setup_video(client, tmp_path):
+    def make_videos(path, names):
+        path.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            (path / name).write_bytes(b"")
+
+    a = tmp_path / "A"
+    b = tmp_path / "B"
+    make_videos(a, ["v.mp4"])
+    make_videos(b, ["v.mp4"])
+    out = str(tmp_path / "video_results.json")
+    res = client.post(
+        "/api/blind-eval/setup",
+        json={
+            "paths": [str(a), str(b)],
+            "total_parts": 1,
+            "current_part": 1,
+            "seed": 1,
+            "output_path": out,
+            "media": "video",
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["common_files"] == ["v.mp4"]
+
+
 def test_api_setup_and_vote(client, folders, tmp_path):
     out = str(tmp_path / "blind_review_results.json")
     res = client.post(

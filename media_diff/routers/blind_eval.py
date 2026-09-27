@@ -13,6 +13,7 @@ class SetupRequest(BaseModel):
     seed: int = 1234
     output_path: str
     load_existing: bool = False
+    media: str = "image"
 
 
 class VoteRequest(BaseModel):
@@ -44,6 +45,7 @@ def setup(req: SetupRequest):
             seed=req.seed,
             output_path=req.output_path,
             load_existing=req.load_existing,
+            media=req.media,
         )
     except blind_eval.BlindEvalError as exc:
         _raise(exc)

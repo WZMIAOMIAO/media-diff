@@ -42,6 +42,8 @@ export interface BlindSetupResult {
   win_lists: Record<string, string[]>;
 }
 
+export type BlindMedia = 'image' | 'video';
+
 export interface BlindSetupParams {
   paths: string[];
   total_parts: number;
@@ -49,5 +51,22 @@ export interface BlindSetupParams {
   seed: number;
   output_path: string;
   load_existing?: boolean;
+  media?: BlindMedia;
 }
+
+/** Runtime blind evaluation state exposed by the compare hooks. */
+export interface BlindEvalApi {
+  aliases: Record<string, string>;
+  order: string[];
+  displayOrders: Record<string, number[]>;
+  outputPath: string;
+  index: number;
+  total: number;
+  /** file name -> winning alias */
+  votes: Map<string, string>;
+  votedCount: number;
+  setIndex: (index: number) => void;
+  vote: (name: string, alias: string | null) => Promise<void>;
+}
+
 

@@ -12,6 +12,8 @@ interface VideoTopNavProps {
   colorPickerDisabled: boolean;
   onColorPickerToggle: () => void;
   onWatermarkClick: () => void;
+  blindActive: boolean;
+  onBlindToggle: () => void;
 }
 
 function VideoTopNav({
@@ -21,6 +23,8 @@ function VideoTopNav({
   colorPickerDisabled,
   onColorPickerToggle,
   onWatermarkClick,
+  blindActive,
+  onBlindToggle,
 }: VideoTopNavProps) {
   const [helpOpen, setHelpOpen] = useState(false);
 
@@ -45,6 +49,12 @@ function VideoTopNav({
             onChange={onHistogramToggle}
             color="#4a9eff"
             label="RGB直方图"
+          />
+          <Toggle
+            checked={blindActive}
+            onChange={onBlindToggle}
+            color="#ff8c00"
+            label="盲评模式"
           />
           <ColorPickerButton
             active={colorPickerEnabled}

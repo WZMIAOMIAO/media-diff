@@ -1,4 +1,4 @@
-import type { BlindEvalApi } from '../hooks/useImageCompare';
+import type { BlindEvalApi } from '../types';
 
 interface BlindEvalBarProps {
   blind: BlindEvalApi;
