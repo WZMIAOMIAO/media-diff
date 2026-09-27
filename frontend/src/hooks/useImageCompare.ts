@@ -275,50 +275,55 @@ export function useImageCompare(): UseImageCompareReturn {
     [applyBlindIndex, forceUpdate],
   );
 
-  // 键盘方向键：每个文件夹独立循环递增
+  // 键盘方向键：每个文件夹独立递增，到达末尾后不再动作
   const nextImage = useCallback(() => {
     if (blindRef.current) {
       const total = blindRef.current.order.length;
-      if (total === 0) return;
-      blindIndexRef.current = (blindIndexRef.current + 1) % total;
+      if (blindIndexRef.current >= total - 1) return;
+      blindIndexRef.current += 1;
       applyBlindIndex();
       forceUpdate();
       return;
     }
+    let changed = false;
     const next = new Map(indicesRef.current);
     for (const f of foldersRef.current) {
       const l = filteredImagesRef.current.get(f.path) ?? [];
-      if (l.length === 0) {
-        if (next.get(f.path) !== 0) next.set(f.path, 0);
-        continue;
-      }
+      if (l.length === 0) continue;
       const cur = next.get(f.path) ?? 0;
-      next.set(f.path, (cur + 1) % l.length);
+      const target = Math.min(cur + 1, l.length - 1);
+      if (target !== cur) {
+        next.set(f.path, target);
+        changed = true;
+      }
     }
+    if (!changed) return;
     indicesRef.current = next;
     forceUpdate();
   }, [applyBlindIndex, forceUpdate]);
 
-  // 键盘方向键：每个文件夹独立循环递减
+  // 键盘方向键：每个文件夹独立递减，到达开头后不再动作
   const prevImage = useCallback(() => {
     if (blindRef.current) {
-      const total = blindRef.current.order.length;
-      if (total === 0) return;
-      blindIndexRef.current = (blindIndexRef.current - 1 + total) % total;
+      if (blindIndexRef.current <= 0) return;
+      blindIndexRef.current -= 1;
       applyBlindIndex();
       forceUpdate();
       return;
     }
+    let changed = false;
     const next = new Map(indicesRef.current);
     for (const f of foldersRef.current) {
       const l = filteredImagesRef.current.get(f.path) ?? [];
-      if (l.length === 0) {
-        if (next.get(f.path) !== 0) next.set(f.path, 0);
-        continue;
-      }
+      if (l.length === 0) continue;
       const cur = next.get(f.path) ?? 0;
-      next.set(f.path, (cur - 1 + l.length) % l.length);
+      const target = Math.max(cur - 1, 0);
+      if (target !== cur) {
+        next.set(f.path, target);
+        changed = true;
+      }
     }
+    if (!changed) return;
     indicesRef.current = next;
     forceUpdate();
   }, [applyBlindIndex, forceUpdate]);

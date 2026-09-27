@@ -236,31 +236,37 @@ export function useVideoCompare(): UseVideoCompareReturn {
   );
 
   const nextVideo = useCallback(() => {
+    let changed = false;
     const next = new Map(indicesRef.current);
     for (const f of foldersRef.current) {
       const l = filteredVideosRef.current.get(f.path) ?? [];
-      if (l.length === 0) {
-        if (next.get(f.path) !== 0) next.set(f.path, 0);
-        continue;
-      }
+      if (l.length === 0) continue;
       const cur = next.get(f.path) ?? 0;
-      next.set(f.path, (cur + 1) % l.length);
+      const target = Math.min(cur + 1, l.length - 1);
+      if (target !== cur) {
+        next.set(f.path, target);
+        changed = true;
+      }
     }
+    if (!changed) return;
     indicesRef.current = next;
     forceUpdate();
   }, [forceUpdate]);
 
   const prevVideo = useCallback(() => {
+    let changed = false;
     const next = new Map(indicesRef.current);
     for (const f of foldersRef.current) {
       const l = filteredVideosRef.current.get(f.path) ?? [];
-      if (l.length === 0) {
-        if (next.get(f.path) !== 0) next.set(f.path, 0);
-        continue;
-      }
+      if (l.length === 0) continue;
       const cur = next.get(f.path) ?? 0;
-      next.set(f.path, (cur - 1 + l.length) % l.length);
+      const target = Math.max(cur - 1, 0);
+      if (target !== cur) {
+        next.set(f.path, target);
+        changed = true;
+      }
     }
+    if (!changed) return;
     indicesRef.current = next;
     forceUpdate();
   }, [forceUpdate]);

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { SelectedFolder, WatermarkConfig } from '../types';
 
 interface WatermarkDialogProps {
@@ -22,9 +23,37 @@ export default function WatermarkDialog({
   onConfigsChange,
   onClose,
 }: WatermarkDialogProps) {
+  // Font size is edited as a free-form string so partial input (e.g. "1" on the
+  // way to "18") is not clamped mid-typing. The config only updates once the
+  // value is a valid number, and it is clamped when the field loses focus.
+  const [fontDrafts, setFontDrafts] = useState<Record<number, string>>({});
+
   const update = (i: number, patch: Partial<WatermarkConfig>) => {
     const cur = configs[i] ?? DEFAULT;
     onConfigsChange({ ...configs, [i]: { ...cur, ...patch } });
+  };
+
+  const changeFontSize = (i: number, raw: string) => {
+    setFontDrafts((d) => ({ ...d, [i]: raw }));
+    const n = parseInt(raw, 10);
+    if (!Number.isNaN(n) && n >= 8 && n <= 72) update(i, { fontSize: n });
+  };
+
+  const commitFontSize = (i: number) => {
+    const raw = fontDrafts[i];
+    if (raw === undefined) return;
+    const n = parseInt(raw, 10);
+    if (Number.isNaN(n)) {
+      setFontDrafts((d) => {
+        const next = { ...d };
+        delete next[i];
+        return next;
+      });
+      return;
+    }
+    const clamped = Math.max(8, Math.min(72, n));
+    update(i, { fontSize: clamped });
+    setFontDrafts((d) => ({ ...d, [i]: String(clamped) }));
   };
 
   const clearAll = () => {
@@ -74,8 +103,12 @@ export default function WatermarkDialog({
                     type="number"
                     min={8}
                     max={72}
-                    value={cfg.fontSize}
-                    onChange={(e) => update(i, { fontSize: Math.max(8, Math.min(72, parseInt(e.target.value) || 24)) })}
+                    value={fontDrafts[i] ?? String(cfg.fontSize)}
+                    onChange={(e) => changeFontSize(i, e.target.value)}
+                    onBlur={() => commitFontSize(i)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                    }}
                     className="w-14 px-1 py-1 text-sm bg-[#1e1e1e] border border-[#3c3c3c] rounded text-[#e0e0e0]"
                   />
                   <span className="text-xs text-[#888888]">px</span>

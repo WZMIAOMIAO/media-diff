@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { FolderTreeApi } from '../hooks/useFolderTree';
 import type { TreeNode } from '../types';
+import { getRelativePath } from '../utils/path';
+import { copyText } from '../utils/clipboard';
 import TreeNodeItem from './TreeNodeItem';
 
 interface FolderTreeProps {
@@ -19,6 +21,7 @@ const MENU_ITEMS = [
   '添加到多目录对比',
   '刷新',
   '复制绝对路径',
+  '复制相对路径',
 ] as const;
 
 function FolderTree({ tree, onAddToCompare }: FolderTreeProps) {
@@ -54,7 +57,9 @@ function FolderTree({ tree, onAddToCompare }: FolderTreeProps) {
     } else if (item === '刷新') {
       void tree.refreshNode(node.path);
     } else if (item === '复制绝对路径') {
-      void navigator.clipboard.writeText(node.path);
+      void copyText(node.path);
+    } else if (item === '复制相对路径') {
+      void copyText(getRelativePath(node.path, tree.roots));
     }
   };
 
@@ -91,7 +96,11 @@ function FolderTree({ tree, onAddToCompare }: FolderTreeProps) {
             <div
               key={item}
               title={
-                item === '复制绝对路径' ? contextMenu.node.path : undefined
+                item === '复制绝对路径'
+                  ? contextMenu.node.path
+                  : item === '复制相对路径'
+                    ? getRelativePath(contextMenu.node.path, tree.roots)
+                    : undefined
               }
               className="px-3 py-1.5 text-sm text-[#e0e0e0] hover:bg-[#3c3c3c] cursor-default"
               onClick={() => handleMenuClick(item)}

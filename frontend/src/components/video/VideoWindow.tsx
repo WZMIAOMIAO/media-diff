@@ -9,6 +9,7 @@ import { clientToUV, getContentBox, EYEDROPPER_CURSOR } from '../../utils/colorS
 import OverlayButtons from '../OverlayButtons';
 import ColorReadout, { type SamplePos } from '../ColorReadout';
 import VideoHistogramOverlay from './VideoHistogramOverlay';
+import CopyableFileName from '../CopyableFileName';
 
 interface WindowInfo {
   index: number;
@@ -291,8 +292,17 @@ export default function VideoWindow({
         titlePosition === 'bottom' ? 'border-t' : 'border-b'
       }`}
     >
-      <span className="text-xs text-[#e0e0e0] truncate" title={video ? `${video.name} ${resolution}` : ''}>
-        {video ? `${video.name} ${resolution}` : '无视频'}
+      <span className="flex items-center gap-1 min-w-0 flex-1 mr-1">
+        {video ? (
+          <>
+            <CopyableFileName name={video.name} className="text-xs text-[#e0e0e0]" />
+            <span className="shrink-0 text-xs text-[#888888]" title={resolution}>
+              {resolution}
+            </span>
+          </>
+        ) : (
+          <span className="text-xs text-[#e0e0e0] truncate">无视频</span>
+        )}
       </span>
       {!isPlaying && video && (
         <OverlayButtons

@@ -7,6 +7,7 @@ import { clientToUV, getContentBox, EYEDROPPER_CURSOR } from '../utils/colorSamp
 import OverlayButtons from './OverlayButtons';
 import HistogramOverlay from './HistogramOverlay';
 import ColorReadout, { type SamplePos } from './ColorReadout';
+import CopyableFileName from './CopyableFileName';
 
 interface WindowInfo {
   index: number;
@@ -254,8 +255,17 @@ export default function ImageWindow({
         titlePosition === 'bottom' ? 'border-t' : 'border-b'
       }`}
     >
-      <span className="text-xs text-[#e0e0e0] truncate" title={image ? `${image.name} ${resolution}` : ''}>
-        {image ? `${image.name} ${resolution}` : '无图片'}
+      <span className="flex items-center gap-1 min-w-0 flex-1 mr-1">
+        {image ? (
+          <>
+            <CopyableFileName name={image.name} className="text-xs text-[#e0e0e0]" />
+            <span className="shrink-0 text-xs text-[#888888]" title={resolution}>
+              {resolution}
+            </span>
+          </>
+        ) : (
+          <span className="text-xs text-[#e0e0e0] truncate">无图片</span>
+        )}
       </span>
       <OverlayButtons
         currentIndex={index}

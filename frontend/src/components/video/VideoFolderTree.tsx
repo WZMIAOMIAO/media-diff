@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { VideoFolderTreeApi } from '../../hooks/video/useVideoFolderTree';
 import type { VideoTreeNode } from '../../types/video';
+import { getRelativePath } from '../../utils/path';
+import { copyText } from '../../utils/clipboard';
 import VideoTreeNodeItem from './VideoTreeNodeItem';
 
 interface VideoFolderTreeProps {
@@ -16,7 +18,7 @@ interface ContextMenuState {
   node: VideoTreeNode;
 }
 
-const MENU_ITEMS = ['添加到多目录对比', '刷新', '复制绝对路径'] as const;
+const MENU_ITEMS = ['添加到多目录对比', '刷新', '复制绝对路径', '复制相对路径'] as const;
 
 function getParentPath(path: string): string {
   if (!path) return path;
@@ -63,7 +65,9 @@ function VideoFolderTree({ tree, onAddToCompare, onSelectVideo }: VideoFolderTre
     } else if (item === '刷新') {
       void tree.refreshNode(folderPath);
     } else if (item === '复制绝对路径') {
-      void navigator.clipboard.writeText(node.path);
+      void copyText(node.path);
+    } else if (item === '复制相对路径') {
+      void copyText(getRelativePath(node.path, tree.roots));
     }
   };
 
@@ -100,7 +104,13 @@ function VideoFolderTree({ tree, onAddToCompare, onSelectVideo }: VideoFolderTre
           {MENU_ITEMS.map((item) => (
             <div
               key={item}
-              title={item === '复制绝对路径' ? contextMenu.node.path : undefined}
+              title={
+                item === '复制绝对路径'
+                  ? contextMenu.node.path
+                  : item === '复制相对路径'
+                    ? getRelativePath(contextMenu.node.path, tree.roots)
+                    : undefined
+              }
               className="px-3 py-1.5 text-sm text-[#e0e0e0] hover:bg-[#3c3c3c] cursor-default"
               onClick={() => handleMenuClick(item)}
             >
