@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { browseFolder, type BrowseResult } from '../api';
+import { loadTreeRoots, saveTreeRoots } from '../utils/treeStorage';
 import type { TreeNode } from '../types';
 
 export type AddRootResult = 'ok' | 'not_exist' | 'exists';
@@ -46,11 +47,42 @@ function buildChildren(result: BrowseResult): TreeNode[] {
   ];
 }
 
-export function useFolderTree(): FolderTreeApi {
+export function useFolderTree(storageKey: string): FolderTreeApi {
   const treeRef = useRef<Map<string, TreeNode>>(new Map());
   const rootsRef = useRef<string[]>([]);
+  const hydratedRef = useRef(false);
   const [, setTick] = useState(0);
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
+
+  const persistRoots = useCallback(() => {
+    if (!hydratedRef.current) return;
+    saveTreeRoots(storageKey, rootsRef.current);
+  }, [storageKey]);
+
+  // Restore previously opened root folders as collapsed nodes. No backend
+  // request is made here: children are loaded lazily on first expand.
+  useEffect(() => {
+    const saved = loadTreeRoots(storageKey);
+    let changed = false;
+    for (const path of saved) {
+      if (rootsRef.current.includes(path)) continue;
+      const node: TreeNode = {
+        name: getPathName(path),
+        path,
+        isDir: true,
+        hasChildren: true,
+        loaded: false,
+        expanded: false,
+        children: [],
+      };
+      treeRef.current.set(path, node);
+      rootsRef.current.push(path);
+      changed = true;
+    }
+    hydratedRef.current = true;
+    if (changed) forceUpdate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
 
   const hasRoot = useCallback(
     (path: string) => rootsRef.current.includes(path),
@@ -86,10 +118,11 @@ export function useFolderTree(): FolderTreeApi {
         if (child.isDir) treeRef.current.set(child.path, child);
       }
       rootsRef.current.push(normalized);
+      persistRoots();
       forceUpdate();
       return 'ok';
     },
-    [forceUpdate],
+    [forceUpdate, persistRoots],
   );
 
   const loadChildren = useCallback(
@@ -157,9 +190,10 @@ export function useFolderTree(): FolderTreeApi {
     (path: string) => {
       treeRef.current.delete(path);
       rootsRef.current = rootsRef.current.filter((p) => p !== path);
+      persistRoots();
       forceUpdate();
     },
-    [forceUpdate],
+    [forceUpdate, persistRoots],
   );
 
   const roots = rootsRef.current

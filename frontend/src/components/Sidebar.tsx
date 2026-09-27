@@ -2,6 +2,7 @@ import { useState, type MouseEvent as ReactMouseEvent } from 'react';
 import FolderInput from './FolderInput';
 import FolderTree from './FolderTree';
 import { useFolderTree } from '../hooks/useFolderTree';
+import { IMAGE_TREE_KEY } from '../utils/treeStorage';
 import type { UseImageCompareReturn } from '../hooks/useImageCompare';
 
 interface SidebarProps {
@@ -13,7 +14,7 @@ const MAX_W = 500;
 const DEFAULT_W = 250;
 
 function Sidebar({ compare }: SidebarProps) {
-  const tree = useFolderTree();
+  const tree = useFolderTree(IMAGE_TREE_KEY);
   const [width, setWidth] = useState(DEFAULT_W);
   const [collapsed, setCollapsed] = useState(false);
 

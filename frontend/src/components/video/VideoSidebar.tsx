@@ -2,6 +2,7 @@ import { useState, type MouseEvent as ReactMouseEvent } from 'react';
 import VideoFolderInput from './VideoFolderInput';
 import VideoFolderTree from './VideoFolderTree';
 import { useVideoFolderTree } from '../../hooks/video/useVideoFolderTree';
+import { VIDEO_TREE_KEY } from '../../utils/treeStorage';
 import type { UseVideoCompareReturn } from '../../hooks/video/useVideoCompare';
 
 interface VideoSidebarProps {
@@ -13,7 +14,7 @@ const MAX_W = 500;
 const DEFAULT_W = 250;
 
 function VideoSidebar({ compare }: VideoSidebarProps) {
-  const tree = useVideoFolderTree();
+  const tree = useVideoFolderTree(VIDEO_TREE_KEY);
   const [width, setWidth] = useState(DEFAULT_W);
   const [collapsed, setCollapsed] = useState(false);
 

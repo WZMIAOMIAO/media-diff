@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { browseFolderVideo } from '../../api/video';
+import { loadTreeRoots, saveTreeRoots } from '../../utils/treeStorage';
 import type {
   AddRootResult,
   VideoBrowseResult,
@@ -48,11 +49,42 @@ function buildChildren(result: VideoBrowseResult): VideoTreeNode[] {
   ];
 }
 
-export function useVideoFolderTree(): VideoFolderTreeApi {
+export function useVideoFolderTree(storageKey: string): VideoFolderTreeApi {
   const treeRef = useRef<Map<string, VideoTreeNode>>(new Map());
   const rootsRef = useRef<string[]>([]);
+  const hydratedRef = useRef(false);
   const [, setTick] = useState(0);
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
+
+  const persistRoots = useCallback(() => {
+    if (!hydratedRef.current) return;
+    saveTreeRoots(storageKey, rootsRef.current);
+  }, [storageKey]);
+
+  // Restore previously opened root folders as collapsed nodes. No backend
+  // request is made here: children are loaded lazily on first expand.
+  useEffect(() => {
+    const saved = loadTreeRoots(storageKey);
+    let changed = false;
+    for (const path of saved) {
+      if (rootsRef.current.includes(path)) continue;
+      const node: VideoTreeNode = {
+        name: getPathName(path),
+        path,
+        isDir: true,
+        hasChildren: true,
+        loaded: false,
+        expanded: false,
+        children: [],
+      };
+      treeRef.current.set(path, node);
+      rootsRef.current.push(path);
+      changed = true;
+    }
+    hydratedRef.current = true;
+    if (changed) forceUpdate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
 
   const hasRoot = useCallback((path: string) => rootsRef.current.includes(path), []);
 
@@ -85,10 +117,11 @@ export function useVideoFolderTree(): VideoFolderTreeApi {
         if (child.isDir) treeRef.current.set(child.path, child);
       }
       rootsRef.current.push(normalized);
+      persistRoots();
       forceUpdate();
       return 'ok';
     },
-    [forceUpdate],
+    [forceUpdate, persistRoots],
   );
 
   const loadChildren = useCallback(
@@ -156,9 +189,10 @@ export function useVideoFolderTree(): VideoFolderTreeApi {
     (path: string) => {
       treeRef.current.delete(path);
       rootsRef.current = rootsRef.current.filter((p) => p !== path);
+      persistRoots();
       forceUpdate();
     },
-    [forceUpdate],
+    [forceUpdate, persistRoots],
   );
 
   const roots = rootsRef.current
