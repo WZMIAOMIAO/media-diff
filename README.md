@@ -4,9 +4,6 @@
 
 本地图片与视频对比工具。基于浏览器运行，支持单图/双图/三图/四图查看、同步缩放平移、直方图叠加，以及视频逐帧对比（播放同步 + 暂停抽帧做图像级精细比较）。
 
-- 图像对比：`/image`
-- 视频对比：`/video`
-
 前端构建产物已随 Python 包分发，安装后一条命令即可启动，**无需安装 Node.js**。
 
 ## 安装
@@ -17,10 +14,10 @@
 
 ```bash
 # 从 git 仓库安装
-uv tool install "git+ssh://git@gitcode.com/gcw_bKUj1mkO/media-diff.git"
+uv tool install "git+https://github.com/WZMIAOMIAO/media-diff.git"
 
 # 或克隆后从本地源码安装
-git clone git@gitcode.com:gcw_bKUj1mkO/media-diff.git
+git clone https://github.com/WZMIAOMIAO/media-diff.git
 cd media-diff
 uv tool install .
 ```
@@ -28,7 +25,7 @@ uv tool install .
 或使用 pip：
 
 ```bash
-pip install "git+ssh://git@gitcode.com/gcw_bKUj1mkO/media-diff.git"
+pip install "git+https://github.com/WZMIAOMIAO/media-diff.git"
 # 或从本地源码
 pip install .
 ```
