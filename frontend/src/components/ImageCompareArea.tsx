@@ -84,6 +84,7 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
         onSample={handleSample}
         watermarkConfig={watermarkConfigs[i]}
         allWindows={allWindows}
+        titlePosition={selectedFolders.length === 4 && i >= 2 ? 'bottom' : 'top'}
       />
     );
   };

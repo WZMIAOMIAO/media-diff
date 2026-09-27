@@ -28,6 +28,7 @@ interface VideoWindowProps {
   onSample: (pos: SamplePos | null) => void;
   watermarkConfig?: WatermarkConfig;
   allWindows: WindowInfo[];
+  titlePosition?: 'top' | 'bottom';
 }
 
 const PREFETCH_RANGE = 3;
@@ -45,6 +46,7 @@ export default function VideoWindow({
   onSample,
   watermarkConfig,
   allWindows,
+  titlePosition = 'top',
 }: VideoWindowProps) {
   const { isPlaying, currentFrame, muted } = player;
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
@@ -281,6 +283,29 @@ export default function VideoWindow({
   const baseH = srcH * fitRatio;
   const panTransform = `translate(${panX}px, ${panY}px)`;
 
+  // In the 2x2 grid the bottom row renders its title bar below the image so
+  // the labels sit at the outer edges instead of crowding the middle.
+  const header = (
+    <div
+      className={`flex items-center justify-between h-8 px-2 bg-[#252525] shrink-0 border-[#3c3c3c] ${
+        titlePosition === 'bottom' ? 'border-t' : 'border-b'
+      }`}
+    >
+      <span className="text-xs text-[#e0e0e0] truncate" title={video ? `${video.name} ${resolution}` : ''}>
+        {video ? `${video.name} ${resolution}` : '无视频'}
+      </span>
+      {!isPlaying && video && (
+        <OverlayButtons
+          currentIndex={index}
+          totalWindows={allWindows.length}
+          allImages={allWindows.map((w) => w.video)}
+          onOverlayStart={(p) => setOverlayVideoPath(p)}
+          onOverlayEnd={() => setOverlayVideoPath(null)}
+        />
+      )}
+    </div>
+  );
+
   return (
     <div
       ref={outerRef}
@@ -296,20 +321,7 @@ export default function VideoWindow({
       onContextMenu={(e) => e.preventDefault()}
       style={{ cursor }}
     >
-      <div className="flex items-center justify-between h-8 px-2 bg-[#252525] border-b border-[#3c3c3c] shrink-0">
-        <span className="text-xs text-[#e0e0e0] truncate" title={video ? `${video.name} ${resolution}` : ''}>
-          {video ? `${video.name} ${resolution}` : '无视频'}
-        </span>
-        {!isPlaying && video && (
-          <OverlayButtons
-            currentIndex={index}
-            totalWindows={allWindows.length}
-            allImages={allWindows.map((w) => w.video)}
-            onOverlayStart={(p) => setOverlayVideoPath(p)}
-            onOverlayEnd={() => setOverlayVideoPath(null)}
-          />
-        )}
-      </div>
+      {titlePosition === 'top' && header}
 
       <div
         ref={imgContainerRef}
@@ -411,6 +423,8 @@ export default function VideoWindow({
           version={pickerVersion}
         />
       </div>
+
+      {titlePosition === 'bottom' && header}
     </div>
   );
 }

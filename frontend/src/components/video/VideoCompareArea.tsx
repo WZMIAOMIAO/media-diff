@@ -146,6 +146,7 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
         onSample={handleSample}
         watermarkConfig={watermarkConfigs[i]}
         allWindows={allWindows}
+        titlePosition={selectedFolders.length === 4 && i >= 2 ? 'bottom' : 'top'}
       />
     );
   };

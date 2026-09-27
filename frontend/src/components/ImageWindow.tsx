@@ -27,6 +27,7 @@ interface ImageWindowProps {
   onSample: (pos: SamplePos | null) => void;
   watermarkConfig?: WatermarkConfig;
   allWindows: WindowInfo[];
+  titlePosition?: 'top' | 'bottom';
 }
 
 export default function ImageWindow({
@@ -41,6 +42,7 @@ export default function ImageWindow({
   onSample,
   watermarkConfig,
   allWindows,
+  titlePosition = 'top',
 }: ImageWindowProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -242,6 +244,27 @@ export default function ImageWindow({
   const panTransform = `translate(${panX}px, ${panY}px)`;
   const pickerVersion = `${zoom},${panX},${panY},${imageUrl ?? ''}`;
 
+  // In the 2x2 grid the bottom row renders its title bar below the image so
+  // the labels sit at the outer edges instead of crowding the middle.
+  const header = (
+    <div
+      className={`flex items-center justify-between h-8 px-2 bg-[#252525] shrink-0 border-[#3c3c3c] ${
+        titlePosition === 'bottom' ? 'border-t' : 'border-b'
+      }`}
+    >
+      <span className="text-xs text-[#e0e0e0] truncate" title={image ? `${image.name} ${resolution}` : ''}>
+        {image ? `${image.name} ${resolution}` : '无图片'}
+      </span>
+      <OverlayButtons
+        currentIndex={index}
+        totalWindows={allWindows.length}
+        allImages={allWindows.map((w) => w.image)}
+        onOverlayStart={(path) => setOverlayPath(path)}
+        onOverlayEnd={() => setOverlayPath(null)}
+      />
+    </div>
+  );
+
   return (
     <div
       ref={outerRef}
@@ -254,18 +277,7 @@ export default function ImageWindow({
       onContextMenu={(e) => e.preventDefault()}
       style={{ cursor }}
     >
-      <div className="flex items-center justify-between h-8 px-2 bg-[#252525] border-b border-[#3c3c3c] shrink-0">
-        <span className="text-xs text-[#e0e0e0] truncate" title={image ? `${image.name} ${resolution}` : ''}>
-          {image ? `${image.name} ${resolution}` : '无图片'}
-        </span>
-        <OverlayButtons
-          currentIndex={index}
-          totalWindows={allWindows.length}
-          allImages={allWindows.map((w) => w.image)}
-          onOverlayStart={(path) => setOverlayPath(path)}
-          onOverlayEnd={() => setOverlayPath(null)}
-        />
-      </div>
+      {titlePosition === 'top' && header}
 
       <div
         ref={imgContainerRef}
@@ -337,6 +349,8 @@ export default function ImageWindow({
           version={pickerVersion}
         />
       </div>
+
+      {titlePosition === 'bottom' && header}
     </div>
   );
 }
