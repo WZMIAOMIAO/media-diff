@@ -22,7 +22,7 @@ interface WindowInfo {
 
 function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, watermarkConfigs }: ImageCompareAreaProps) {
   const sharedZoom = useSharedZoom();
-  const { selectedFolders, filteredImages, currentIndices, nextImage, prevImage } = compare;
+  const { selectedFolders, filteredImages, currentIndices, nextImage, prevImage, blind } = compare;
   const [samplePos, setSamplePos] = useState<SamplePos | null>(null);
 
   const handleSample = useCallback((pos: SamplePos | null) => {
@@ -58,6 +58,14 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
   }
 
   const allWindows: WindowInfo[] = selectedFolders.map((f, i) => {
+    if (blind) {
+      const name = blind.order[blind.index];
+      const order = (name && blind.displayOrders[name]) || selectedFolders.map((_, k) => k);
+      const folder = selectedFolders[order[i] ?? i] ?? f;
+      const image =
+        (filteredImages.get(folder.path) ?? []).find((e) => e.name === name) ?? null;
+      return { index: i, folder, image };
+    }
     const idx = currentIndices.get(f.path) ?? 0;
     return {
       index: i,
@@ -66,9 +74,11 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
     };
   });
 
+  const blindName = blind ? blind.order[blind.index] : undefined;
+
   const renderWindow = (i: number) => {
     const w = allWindows[i];
-    const idx = currentIndices.get(w.folder.path) ?? 0;
+    const idx = blind ? blind.index : currentIndices.get(w.folder.path) ?? 0;
     return (
       <ImageWindow
         key={w.folder.path}
@@ -76,7 +86,7 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
         folder={w.folder}
         image={w.image}
         imageIndex={idx}
-        totalImages={filteredImages.get(w.folder.path)?.length ?? 0}
+        totalImages={blind ? blind.total : filteredImages.get(w.folder.path)?.length ?? 0}
         sharedZoom={sharedZoom}
         histogramEnabled={histogramEnabled}
         colorPickerEnabled={colorPickerEnabled}
@@ -85,6 +95,19 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
         watermarkConfig={watermarkConfigs[i]}
         allWindows={allWindows}
         titlePosition={selectedFolders.length === 4 && i >= 2 ? 'bottom' : 'top'}
+        blindVote={
+          blind && blindName
+            ? {
+                alias: blind.aliases[w.folder.path] ?? '',
+                votedAlias: blind.votes.get(blindName) ?? null,
+                onVote: () => {
+                  const alias = blind.aliases[w.folder.path] ?? '';
+                  const current = blind.votes.get(blindName) ?? null;
+                  void blind.vote(blindName, current === alias ? null : alias);
+                },
+              }
+            : null
+        }
       />
     );
   };

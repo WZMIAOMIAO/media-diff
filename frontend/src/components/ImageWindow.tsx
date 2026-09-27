@@ -28,6 +28,7 @@ interface ImageWindowProps {
   watermarkConfig?: WatermarkConfig;
   allWindows: WindowInfo[];
   titlePosition?: 'top' | 'bottom';
+  blindVote?: { alias: string; votedAlias: string | null; onVote: () => void } | null;
 }
 
 export default function ImageWindow({
@@ -43,6 +44,7 @@ export default function ImageWindow({
   watermarkConfig,
   allWindows,
   titlePosition = 'top',
+  blindVote,
 }: ImageWindowProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -335,7 +337,39 @@ export default function ImageWindow({
             <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-xs text-[#888888]">
               {imageIndex + 1}/{totalImages}
             </span>
-            <span className="absolute bottom-1 right-1 text-xs text-[#888888]">{fitPercent}%</span>
+            {!blindVote && (
+              <span className="absolute bottom-1 right-1 text-xs text-[#888888]">{fitPercent}%</span>
+            )}
+            {blindVote && (
+              <button
+                type="button"
+                title="点赞（每组只能选一张）"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  blindVote.onVote();
+                }}
+                className={`absolute bottom-1 right-1 z-20 p-2 rounded-full transition-colors ${
+                  blindVote.votedAlias === blindVote.alias
+                    ? 'bg-[#ff8c00] text-white'
+                    : 'text-[#e0e0e0] opacity-50 hover:opacity-100'
+                }`}
+              >
+                <svg
+                  width="28"
+                  height="28"
+                  viewBox="0 0 24 24"
+                  fill={blindVote.votedAlias === blindVote.alias ? 'currentColor' : 'none'}
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M7 10v12" />
+                  <path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" />
+                </svg>
+              </button>
+            )}
           </>
         ) : (
           <span className="text-sm text-[#888888]">加载中...</span>

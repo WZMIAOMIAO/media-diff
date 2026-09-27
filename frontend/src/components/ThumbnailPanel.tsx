@@ -76,6 +76,7 @@ function ThumbnailPanel({ compare }: ThumbnailPanelProps) {
             <Toggle
               checked={compare.intersectionMode}
               onChange={(v) => compare.setIntersectionMode(v)}
+              disabled={!!compare.blind}
               color="#4a9eff"
               label="交集"
             />

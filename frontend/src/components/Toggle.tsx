@@ -3,14 +3,16 @@ interface ToggleProps {
   onChange: (checked: boolean) => void;
   color?: string;
   label?: string;
+  disabled?: boolean;
 }
 
-export default function Toggle({ checked, onChange, color = '#4a9eff', label }: ToggleProps) {
+export default function Toggle({ checked, onChange, color = '#4a9eff', label, disabled = false }: ToggleProps) {
   return (
-    <label className="flex items-center gap-1 cursor-pointer text-sm select-none">
+    <label className={`flex items-center gap-1 text-sm select-none ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         className="sr-only"
       />

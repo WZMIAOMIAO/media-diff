@@ -11,6 +11,8 @@ interface TopNavProps {
   colorPickerEnabled: boolean;
   onColorPickerToggle: () => void;
   onWatermarkClick: () => void;
+  blindActive: boolean;
+  onBlindToggle: () => void;
 }
 
 function TopNav({
@@ -19,9 +21,10 @@ function TopNav({
   colorPickerEnabled,
   onColorPickerToggle,
   onWatermarkClick,
+  blindActive,
+  onBlindToggle,
 }: TopNavProps) {
   const [annotation, setAnnotation] = useState(false);
-  const [blind, setBlind] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
   return (
@@ -44,6 +47,10 @@ function TopNav({
           <Toggle
             checked={annotation}
             onChange={() => {
+              if (blindActive) {
+                alert('标注模式和盲评模式不能同时开启，请先关闭当前模式');
+                return;
+              }
               setAnnotation(false);
               alert('开发中');
             }}
@@ -51,11 +58,8 @@ function TopNav({
             label="标注模式"
           />
           <Toggle
-            checked={blind}
-            onChange={() => {
-              setBlind(false);
-              alert('盲评模式开发中');
-            }}
+            checked={blindActive}
+            onChange={onBlindToggle}
             color="#ff8c00"
             label="盲评模式"
           />

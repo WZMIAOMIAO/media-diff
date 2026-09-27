@@ -1,4 +1,4 @@
-import type { HistogramData } from '../types';
+import type { BlindSetupParams, BlindSetupResult, HistogramData } from '../types';
 
 const API_BASE = '/api';
 
@@ -186,4 +186,61 @@ export function evictImageCache(pathsToKeep: Set<string>): void {
       _imageCache.delete(path);
     }
   }
+}
+
+// ---- 盲评模式 ----
+
+async function postBlind<T>(endpoint: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}/blind-eval/${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(payload?.detail || '盲评请求失败');
+  }
+  return payload as T;
+}
+
+export function setupBlindEval(
+  params: BlindSetupParams,
+): Promise<BlindSetupResult> {
+  return postBlind<BlindSetupResult>('setup', {
+    load_existing: false,
+    ...params,
+  });
+}
+
+export async function voteBlindEval(
+  outputPath: string,
+  imageName: string,
+  alias: string | null,
+): Promise<Record<string, unknown>> {
+  const res = await postBlind<{ data: Record<string, unknown> }>('vote', {
+    output_path: outputPath,
+    image_name: imageName,
+    alias,
+  });
+  return res.data;
+}
+
+export async function loadBlindEval(
+  outputPath: string,
+): Promise<Record<string, unknown>> {
+  const res = await postBlind<{ data: Record<string, unknown> }>('load', {
+    output_path: outputPath,
+  });
+  return res.data;
+}
+
+export async function saveBlindEval(
+  outputPath: string,
+  data: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const res = await postBlind<{ data: Record<string, unknown> }>('save', {
+    output_path: outputPath,
+    data,
+  });
+  return res.data;
 }

@@ -1,6 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { listImages, type FileEntry } from '../api';
-import type { SelectedFolder } from '../types';
+import { listImages, voteBlindEval, type FileEntry } from '../api';
+import type { BlindSetupResult, SelectedFolder } from '../types';
+
+export interface BlindEvalApi {
+  aliases: Record<string, string>;
+  order: string[];
+  displayOrders: Record<string, number[]>;
+  outputPath: string;
+  index: number;
+  total: number;
+  /** image name -> winning alias */
+  votes: Map<string, string>;
+  votedCount: number;
+  setIndex: (index: number) => void;
+  vote: (name: string, alias: string | null) => Promise<void>;
+}
+
+interface BlindRuntime {
+  aliases: Record<string, string>;
+  order: string[];
+  displayOrders: Record<string, number[]>;
+  outputPath: string;
+  winLists: Record<string, string[]>;
+}
 
 export interface UseImageCompareReturn {
   // 文件夹
@@ -30,6 +52,11 @@ export interface UseImageCompareReturn {
   // 交集模式
   intersectionMode: boolean;
   setIntersectionMode: (b: boolean) => void;
+
+  // 盲评模式
+  blind: BlindEvalApi | null;
+  enterBlind: (result: BlindSetupResult) => void;
+  exitBlind: () => void;
 }
 
 function getPathName(path: string): string {
@@ -42,6 +69,18 @@ function getPathName(path: string): string {
   return trimmed.substring(idx + 1);
 }
 
+function winListsFromData(
+  data: Record<string, unknown>,
+  aliases: Record<string, string>,
+): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+  for (const alias of new Set(Object.values(aliases))) {
+    const value = data[`${alias}_win_list`];
+    result[alias] = Array.isArray(value) ? (value as string[]) : [];
+  }
+  return result;
+}
+
 export function useImageCompare(): UseImageCompareReturn {
   const foldersRef = useRef<SelectedFolder[]>([]);
   const imagesRef = useRef<Map<string, FileEntry[]>>(new Map());
@@ -52,6 +91,10 @@ export function useImageCompare(): UseImageCompareReturn {
   const [searchQuery, setSearchQuery] = useState('');
   const [intersectionMode, setIntersectionModeState] = useState(false);
 
+  const blindRef = useRef<BlindRuntime | null>(null);
+  const blindIndexRef = useRef(0);
+  const prevModeRef = useRef<{ intersectionMode: boolean; searchQuery: string } | null>(null);
+
   const selectedFolders = foldersRef.current;
   const imagesPerFolder = imagesRef.current;
   const currentIndices = indicesRef.current;
@@ -61,6 +104,21 @@ export function useImageCompare(): UseImageCompareReturn {
   const filteredImages = useMemo(() => {
     const map = new Map<string, FileEntry[]>();
     const q = searchQuery.trim().toLowerCase();
+    const blind = blindRef.current;
+
+    if (blind) {
+      // 盲评模式：所有文件夹按当前份的 shuffle 顺序对齐同名图片。
+      for (const f of foldersRef.current) {
+        const imgs = imagesRef.current.get(f.path) ?? [];
+        const byName = new Map(imgs.map((i) => [i.name, i] as const));
+        let list = blind.order
+          .map((n) => byName.get(n))
+          .filter((x): x is FileEntry => x !== undefined);
+        if (q) list = list.filter((i) => i.name.toLowerCase().includes(q));
+        map.set(f.path, list);
+      }
+      return map;
+    }
 
     // 交集：所有文件夹文件名交集
     let intersectionNames: Set<string> | null = null;
@@ -97,6 +155,16 @@ export function useImageCompare(): UseImageCompareReturn {
   const filteredImagesRef = useRef(filteredImages);
   filteredImagesRef.current = filteredImages;
 
+  // 将每个文件夹的索引对齐到当前盲评组编号。
+  const applyBlindIndex = useCallback(() => {
+    const next = new Map<string, number>();
+    for (const f of foldersRef.current) {
+      const len = filteredImagesRef.current.get(f.path)?.length ?? 0;
+      next.set(f.path, len === 0 ? 0 : Math.min(blindIndexRef.current, len - 1));
+    }
+    indicesRef.current = next;
+  }, []);
+
   // 索引越界自动归位（每个文件夹独立 clamp）
   useEffect(() => {
     let changed = false;
@@ -122,6 +190,10 @@ export function useImageCompare(): UseImageCompareReturn {
 
   const addFolder = useCallback(
     async (path: string) => {
+      if (blindRef.current) {
+        alert('盲评模式下请先退出盲评再添加对比目录');
+        return;
+      }
       const trimmed = path.trim();
       if (!trimmed) return;
       if (foldersRef.current.length >= 4) {
@@ -153,6 +225,10 @@ export function useImageCompare(): UseImageCompareReturn {
 
   const removeFolder = useCallback(
     (path: string) => {
+      if (blindRef.current) {
+        alert('盲评模式下请先退出盲评再删除对比目录');
+        return;
+      }
       foldersRef.current = foldersRef.current.filter((f) => f.path !== path);
       const nextImages = new Map(imagesRef.current);
       nextImages.delete(path);
@@ -169,6 +245,10 @@ export function useImageCompare(): UseImageCompareReturn {
   );
 
   const clearFolders = useCallback(() => {
+    if (blindRef.current) {
+      alert('盲评模式下请先退出盲评再清除对比目录');
+      return;
+    }
     foldersRef.current = [];
     imagesRef.current = new Map();
     indicesRef.current = new Map();
@@ -179,6 +259,12 @@ export function useImageCompare(): UseImageCompareReturn {
 
   const setCurrentIndex = useCallback(
     (folderPath: string, idx: number) => {
+      if (blindRef.current) {
+        blindIndexRef.current = idx;
+        applyBlindIndex();
+        forceUpdate();
+        return;
+      }
       const l = filteredImagesRef.current.get(folderPath) ?? [];
       const clamped = l.length === 0 ? 0 : Math.max(0, Math.min(idx, l.length - 1));
       const next = new Map(indicesRef.current);
@@ -186,11 +272,19 @@ export function useImageCompare(): UseImageCompareReturn {
       indicesRef.current = next;
       forceUpdate();
     },
-    [forceUpdate],
+    [applyBlindIndex, forceUpdate],
   );
 
   // 键盘方向键：每个文件夹独立循环递增
   const nextImage = useCallback(() => {
+    if (blindRef.current) {
+      const total = blindRef.current.order.length;
+      if (total === 0) return;
+      blindIndexRef.current = (blindIndexRef.current + 1) % total;
+      applyBlindIndex();
+      forceUpdate();
+      return;
+    }
     const next = new Map(indicesRef.current);
     for (const f of foldersRef.current) {
       const l = filteredImagesRef.current.get(f.path) ?? [];
@@ -203,10 +297,18 @@ export function useImageCompare(): UseImageCompareReturn {
     }
     indicesRef.current = next;
     forceUpdate();
-  }, [forceUpdate]);
+  }, [applyBlindIndex, forceUpdate]);
 
   // 键盘方向键：每个文件夹独立循环递减
   const prevImage = useCallback(() => {
+    if (blindRef.current) {
+      const total = blindRef.current.order.length;
+      if (total === 0) return;
+      blindIndexRef.current = (blindIndexRef.current - 1 + total) % total;
+      applyBlindIndex();
+      forceUpdate();
+      return;
+    }
     const next = new Map(indicesRef.current);
     for (const f of foldersRef.current) {
       const l = filteredImagesRef.current.get(f.path) ?? [];
@@ -219,11 +321,20 @@ export function useImageCompare(): UseImageCompareReturn {
     }
     indicesRef.current = next;
     forceUpdate();
-  }, [forceUpdate]);
+  }, [applyBlindIndex, forceUpdate]);
 
   // Ctrl+点击无同名时的 fallback：所有文件夹对齐到相同序号
   const alignByIndex = useCallback(
     (idx: number) => {
+      if (blindRef.current) {
+        blindIndexRef.current = Math.max(
+          0,
+          Math.min(idx, blindRef.current.order.length - 1),
+        );
+        applyBlindIndex();
+        forceUpdate();
+        return;
+      }
       const next = new Map(indicesRef.current);
       for (const f of foldersRef.current) {
         const l = filteredImagesRef.current.get(f.path) ?? [];
@@ -236,7 +347,7 @@ export function useImageCompare(): UseImageCompareReturn {
       indicesRef.current = next;
       forceUpdate();
     },
-    [forceUpdate],
+    [applyBlindIndex, forceUpdate],
   );
 
   // Ctrl+点击：所有文件夹对齐到同名图片，找不到的回退到相同序号
@@ -244,6 +355,15 @@ export function useImageCompare(): UseImageCompareReturn {
     (folderPath: string, imageName: string) => {
       const list = filteredImagesRef.current.get(folderPath);
       if (!list || !imageName) return;
+      if (blindRef.current) {
+        const idx = list.findIndex((i) => i.name === imageName);
+        if (idx >= 0) {
+          blindIndexRef.current = idx;
+          applyBlindIndex();
+          forceUpdate();
+        }
+        return;
+      }
       const srcIdx = list.findIndex((i) => i.name === imageName);
       if (srcIdx < 0) return;
       const next = new Map(indicesRef.current);
@@ -260,13 +380,96 @@ export function useImageCompare(): UseImageCompareReturn {
       indicesRef.current = next;
       forceUpdate();
     },
-    [forceUpdate],
+    [applyBlindIndex, forceUpdate],
   );
 
   const setIntersectionMode = useCallback((b: boolean) => {
+    if (blindRef.current) return;
     if (b && foldersRef.current.length < 2) return;
     setIntersectionModeState(b);
   }, []);
+
+  const enterBlind = useCallback(
+    (result: BlindSetupResult) => {
+      blindRef.current = {
+        aliases: result.aliases,
+        order: result.common_files,
+        displayOrders: result.display_orders,
+        outputPath: result.output_path,
+        winLists: result.win_lists,
+      };
+      prevModeRef.current = { intersectionMode, searchQuery };
+      setIntersectionModeState(false);
+      setSearchQuery('');
+      blindIndexRef.current = 0;
+      applyBlindIndex();
+      forceUpdate();
+    },
+    [applyBlindIndex, forceUpdate, intersectionMode, searchQuery],
+  );
+
+  const exitBlind = useCallback(() => {
+    if (!blindRef.current) return;
+    blindRef.current = null;
+    const prev = prevModeRef.current;
+    if (prev) {
+      setIntersectionModeState(prev.intersectionMode);
+      setSearchQuery(prev.searchQuery);
+    }
+    prevModeRef.current = null;
+    blindIndexRef.current = 0;
+    const next = new Map<string, number>();
+    for (const f of foldersRef.current) next.set(f.path, 0);
+    indicesRef.current = next;
+    forceUpdate();
+  }, [forceUpdate]);
+
+  const vote = useCallback(
+    async (name: string, alias: string | null) => {
+      const blind = blindRef.current;
+      if (!blind) return;
+      try {
+        const data = await voteBlindEval(blind.outputPath, name, alias);
+        blind.winLists = winListsFromData(data, blind.aliases);
+        forceUpdate();
+      } catch (e) {
+        alert(e instanceof Error ? e.message : '保存投票失败');
+      }
+    },
+    [forceUpdate],
+  );
+
+  const blindSetIndex = useCallback(
+    (index: number) => {
+      const total = blindRef.current?.order.length ?? 0;
+      if (total === 0) return;
+      blindIndexRef.current = Math.max(0, Math.min(index, total - 1));
+      applyBlindIndex();
+      forceUpdate();
+    },
+    [applyBlindIndex, forceUpdate],
+  );
+
+  const blindRuntime = blindRef.current;
+  let blind: BlindEvalApi | null = null;
+  if (blindRuntime) {
+    const votes = new Map<string, string>();
+    for (const [alias, names] of Object.entries(blindRuntime.winLists)) {
+      for (const n of names) votes.set(n, alias);
+    }
+    blind = {
+      aliases: blindRuntime.aliases,
+      order: blindRuntime.order,
+      displayOrders: blindRuntime.displayOrders,
+      outputPath: blindRuntime.outputPath,
+      index: blindIndexRef.current,
+      total: blindRuntime.order.length,
+      votes,
+      votedCount: blindRuntime.order.filter((n) => votes.has(n)).length,
+      setIndex: blindSetIndex,
+      vote,
+    };
+  }
 
   return {
     selectedFolders,
@@ -285,5 +488,8 @@ export function useImageCompare(): UseImageCompareReturn {
     setSearchQuery,
     intersectionMode,
     setIntersectionMode,
+    blind,
+    enterBlind,
+    exitBlind,
   };
 }

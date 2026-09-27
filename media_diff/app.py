@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 
 from media_diff import __version__
 from media_diff.routers import router as filesystem_router
+from media_diff.routers.blind_eval import router as blind_eval_router
 from media_diff.routers.images import router as images_router
 from media_diff.routers.videos import router as videos_router
 
@@ -39,6 +40,7 @@ def create_app() -> FastAPI:
     app.include_router(filesystem_router)
     app.include_router(images_router)
     app.include_router(videos_router)
+    app.include_router(blind_eval_router)
 
     @app.get("/api/health", tags=["health"])
     def health() -> dict:

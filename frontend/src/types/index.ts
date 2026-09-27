@@ -28,3 +28,26 @@ export interface WatermarkConfig {
   color: string; // hex 如 #ff0000
   fontSize: number; // 8~72
 }
+
+export interface BlindSetupResult {
+  existing_file_matched: boolean;
+  output_path: string;
+  /** folder path -> alias (A/B/C/D) */
+  aliases: Record<string, string>;
+  /** current part file names, already shuffled */
+  common_files: string[];
+  /** image name -> window order, indexed by visual position -> folder index */
+  display_orders: Record<string, number[]>;
+  /** alias -> list of winning image names */
+  win_lists: Record<string, string[]>;
+}
+
+export interface BlindSetupParams {
+  paths: string[];
+  total_parts: number;
+  current_part: number;
+  seed: number;
+  output_path: string;
+  load_existing?: boolean;
+}
+

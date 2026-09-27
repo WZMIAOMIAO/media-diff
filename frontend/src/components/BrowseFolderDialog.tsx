@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { browseFolder, getRoots, type SubDir } from '../api';
+import { browseFolder, getRoots, type FileEntry, type SubDir } from '../api';
 
 interface BrowseFolderDialogProps {
   onClose: () => void;
@@ -35,6 +35,7 @@ function BrowseFolderDialog({
   const [currentPath, setCurrentPath] = useState('');
   const [inputPath, setInputPath] = useState('');
   const [subdirs, setSubdirs] = useState<SubDir[]>([]);
+  const [jsonFiles, setJsonFiles] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -47,9 +48,11 @@ function BrowseFolderDialog({
         setCurrentPath(result.path);
         setInputPath(result.path);
         setSubdirs(result.subdirs);
+        setJsonFiles(result.json_files ?? []);
       } catch (e) {
         setError(e instanceof Error ? e.message : '浏览失败');
         setSubdirs([]);
+        setJsonFiles([]);
       } finally {
         setLoading(false);
       }
@@ -125,6 +128,7 @@ function BrowseFolderDialog({
     } catch (e) {
       setError(e instanceof Error ? e.message : '浏览失败');
       setSubdirs([]);
+      setJsonFiles([]);
     } finally {
       setLoading(false);
     }
@@ -168,7 +172,7 @@ function BrowseFolderDialog({
           {error && (
             <div className="px-2 py-2 text-sm text-[#ef4444]">{error}</div>
           )}
-          {!loading && !error && subdirs.length === 0 && (
+          {!loading && !error && subdirs.length === 0 && jsonFiles.length === 0 && (
             <div className="px-2 py-2 text-sm text-[#888888]">无子目录</div>
           )}
           {!loading &&
@@ -182,6 +186,19 @@ function BrowseFolderDialog({
               >
                 <span>📁</span>
                 <span className="truncate">{s.name}</span>
+              </div>
+            ))}
+          {!loading &&
+            !error &&
+            jsonFiles.map((f) => (
+              <div
+                key={f.path}
+                onClick={() => onSelect(f.path)}
+                title={f.path}
+                className="flex items-center gap-2 px-2 py-1.5 text-sm text-[#ff8c00] hover:bg-[#3c3c3c] cursor-pointer rounded"
+              >
+                <span>📄</span>
+                <span className="truncate">{f.name}</span>
               </div>
             ))}
         </div>
