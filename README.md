@@ -76,6 +76,17 @@ media-diff stop --force      # 跳过身份校验，强制结束进程
 
 `stop` 默认会先做健康检查确认目标确实是 media-diff 服务（防止 PID 被复用误杀），校验不通过会跳过并提示，可用 `--force` 强制结束。
 
+### 清理缓存
+
+非原生格式（mkv/avi/mov/flv 等）播放时会转码为 mp4 缓存到系统临时目录，长期使用可能占用磁盘。可用以下命令清理：
+
+```bash
+media-diff clean             # 删除全部转码缓存，并显示释放的空间
+media-diff clean --dry-run   # 只统计不删除
+```
+
+缓存目录默认在系统临时目录下（Windows 为 `%TEMP%\_video_transcode_cache`），可用环境变量 `MEDIA_DIFF_TRANSCODE_CACHE_DIR` 指定其他位置。
+
 启动时会自动检测：若目标 `host:port` 上已有 media-diff 在运行，会直接打开该地址而不是重复启动；若检测到其他端口的实例，会提示但仍在当前端口启动。
 
 > 实例信息记录在用户状态目录（Linux 为 `~/.local/state/media-diff/`，macOS 为 `~/Library/Application Support/media-diff/`，Windows 为 `%LOCALAPPDATA%\media-diff\`），可用环境变量 `MEDIA_DIFF_STATE_DIR` 覆盖。进程退出后会自动清理，失效条目也会在下次读取时按 PID 与健康检查剔除。

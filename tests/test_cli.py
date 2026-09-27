@@ -54,3 +54,22 @@ def test_open_browser_silent_on_success(monkeypatch, capsys):
     monkeypatch.setattr(cli, "_try_open", lambda url: True)
     cli._open_browser("http://127.0.0.1:8000")
     assert capsys.readouterr().out == ""
+
+
+def test_cmd_clean_dry_run_then_remove(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("MEDIA_DIFF_TRANSCODE_CACHE_DIR", str(tmp_path))
+    (tmp_path / "a.mp4").write_bytes(b"x" * 2048)
+
+    assert cli._cmd_clean(argparse.Namespace(dry_run=True)) == 0
+    assert (tmp_path / "a.mp4").exists()
+    assert "Run without --dry-run" in capsys.readouterr().out
+
+    assert cli._cmd_clean(argparse.Namespace(dry_run=False)) == 0
+    assert not (tmp_path / "a.mp4").exists()
+    assert "Removed 1" in capsys.readouterr().out
+
+
+def test_cmd_clean_empty(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("MEDIA_DIFF_TRANSCODE_CACHE_DIR", str(tmp_path))
+    assert cli._cmd_clean(argparse.Namespace(dry_run=False)) == 0
+    assert "already empty" in capsys.readouterr().out

@@ -401,7 +401,7 @@ def _transcode_cache_path(path: str) -> str:
     The cache dir lives under the system temp directory. Files are keyed by a
     hash of the absolute path so the same video maps to one cache file.
     """
-    cache_root = os.path.join(tempfile.gettempdir(), VIDEO_TRANSCODE_CACHE_DIR)
+    cache_root = transcode_cache_dir()
     os.makedirs(cache_root, exist_ok=True)
     # normcase lower-cases on Windows (no-op on POSIX) so that the same file
     # with different drive-letter casing maps to one cache entry.
@@ -465,9 +465,72 @@ def transcode_to_mp4(path: str) -> str:
     return out_path
 
 
+def transcode_cache_dir() -> str:
+    """Directory holding cached transcoded videos.
+
+    Defaults to a folder under the system temp dir; override with the
+    ``MEDIA_DIFF_TRANSCODE_CACHE_DIR`` environment variable.
+    """
+    override = os.environ.get("MEDIA_DIFF_TRANSCODE_CACHE_DIR")
+    if override:
+        return os.path.expanduser(override)
+    return os.path.join(tempfile.gettempdir(), VIDEO_TRANSCODE_CACHE_DIR)
+
+
+def transcode_cache_stats() -> tuple[int, int]:
+    """Return ``(file_count, total_bytes)`` for the transcode cache."""
+    cache_root = transcode_cache_dir()
+    if not os.path.isdir(cache_root):
+        return 0, 0
+    count = 0
+    total = 0
+    try:
+        for name in os.listdir(cache_root):
+            p = os.path.join(cache_root, name)
+            try:
+                if os.path.isfile(p):
+                    count += 1
+                    total += os.path.getsize(p)
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return count, total
+
+
+def clear_transcode_cache(dry_run: bool = False) -> tuple[int, int]:
+    """Remove every cached transcoded video.
+
+    Returns ``(removed_count, removed_bytes)``; with ``dry_run`` nothing is
+    deleted and the current stats are returned instead.
+    """
+    cache_root = transcode_cache_dir()
+    count, total = transcode_cache_stats()
+    if dry_run or count == 0:
+        return count, total
+    removed = 0
+    removed_bytes = 0
+    try:
+        names = os.listdir(cache_root)
+    except OSError:
+        return 0, 0
+    for name in names:
+        p = os.path.join(cache_root, name)
+        try:
+            if not os.path.isfile(p):
+                continue
+            size = os.path.getsize(p)
+            os.remove(p)
+            removed += 1
+            removed_bytes += size
+        except OSError:
+            pass
+    return removed, removed_bytes
+
+
 def cleanup_transcode_cache(max_entries: int = 20) -> None:
     """Best-effort cleanup of old transcode cache files (by mtime)."""
-    cache_root = os.path.join(tempfile.gettempdir(), VIDEO_TRANSCODE_CACHE_DIR)
+    cache_root = transcode_cache_dir()
     if not os.path.isdir(cache_root):
         return
     try:

@@ -191,6 +191,15 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Kill even if the process does not answer as media-diff",
     )
+
+    clean = subparsers.add_parser(
+        "clean", help="Remove cached transcoded videos to free disk space"
+    )
+    clean.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Only report what would be removed",
+    )
     return parser
 
 
@@ -250,6 +259,41 @@ def _cmd_stop(args: argparse.Namespace) -> int:
             print(f"Failed to stop PID {pid} (still running).")
             ok = False
     return 0 if ok else 1
+
+
+def _human_size(num_bytes: int) -> str:
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024:
+            return f"{int(size)} B" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
+
+
+def _cmd_clean(args: argparse.Namespace) -> int:
+    from media_diff.utils.videos import clear_transcode_cache, transcode_cache_dir
+
+    location = transcode_cache_dir()
+    if args.dry_run:
+        count, total = clear_transcode_cache(dry_run=True)
+        if count == 0:
+            print(f"Transcode cache is empty ({location}).")
+        else:
+            print(
+                f"Transcode cache: {count} file(s), {_human_size(total)} "
+                f"at {location}. Run without --dry-run to remove."
+            )
+        return 0
+
+    count, total = clear_transcode_cache()
+    if count == 0:
+        print(f"Transcode cache is already empty ({location}).")
+    else:
+        print(
+            f"Removed {count} cached file(s), freed {_human_size(total)} "
+            f"({location})."
+        )
+    return 0
 
 
 def _start_server(args: argparse.Namespace) -> None:
@@ -312,6 +356,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "stop":
         return _cmd_stop(args)
+    if args.command == "clean":
+        return _cmd_clean(args)
 
     _start_server(args)
     return 0
