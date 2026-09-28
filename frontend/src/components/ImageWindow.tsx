@@ -8,6 +8,7 @@ import OverlayButtons from './OverlayButtons';
 import HistogramOverlay from './HistogramOverlay';
 import ColorReadout, { type SamplePos } from './ColorReadout';
 import CopyableFileName from './CopyableFileName';
+import { useI18n } from '../i18n';
 
 interface WindowInfo {
   index: number;
@@ -47,6 +48,7 @@ export default function ImageWindow({
   titlePosition = 'top',
   blindVote,
 }: ImageWindowProps) {
+  const { t } = useI18n();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [resolution, setResolution] = useState('');
@@ -264,7 +266,7 @@ export default function ImageWindow({
             </span>
           </>
         ) : (
-          <span className="text-xs text-[#e0e0e0] truncate">无图片</span>
+          <span className="text-xs text-[#e0e0e0] truncate">{t('window.noImage')}</span>
         )}
       </span>
       <OverlayButtons
@@ -302,7 +304,7 @@ export default function ImageWindow({
         }}
       >
         {loadError ? (
-          <span className="text-sm text-[#ef4444]">图片加载失败</span>
+          <span className="text-sm text-[#ef4444]">{t('window.imageLoadFailed')}</span>
         ) : imageUrl ? (
           <>
             <div
@@ -353,7 +355,7 @@ export default function ImageWindow({
             {blindVote && (
               <button
                 type="button"
-                title="点赞（每组只能选一张）"
+                title={t('window.vote')}
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -382,7 +384,7 @@ export default function ImageWindow({
             )}
           </>
         ) : (
-          <span className="text-sm text-[#888888]">加载中...</span>
+          <span className="text-sm text-[#888888]">{t('common.loading')}</span>
         )}
 
         <ColorReadout

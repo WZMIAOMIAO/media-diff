@@ -3,6 +3,7 @@ import { voteBlindEval } from '../../api';
 import { getVideoInfo, listVideos } from '../../api/video';
 import type { VideoEntry, VideoInfo } from '../../types/video';
 import type { BlindEvalApi, BlindSetupResult, SelectedFolder } from '../../types';
+import { t } from '../../i18n/store';
 
 export interface UseVideoCompareReturn {
   selectedFolders: SelectedFolder[];
@@ -219,13 +220,13 @@ export function useVideoCompare(): UseVideoCompareReturn {
   const addFolder = useCallback(
     async (path: string) => {
       if (blindRef.current) {
-        alert('盲评模式下请先退出盲评再添加对比目录');
+        alert(t('blind.locked.add'));
         return;
       }
       const trimmed = path.trim();
       if (!trimmed) return;
       if (foldersRef.current.length >= 4) {
-        alert('不支持超过4个视频对比');
+        alert(t('limit.folders'));
         return;
       }
       if (foldersRef.current.some((f) => f.path === trimmed)) return;
@@ -254,7 +255,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
   const removeFolder = useCallback(
     (path: string) => {
       if (blindRef.current) {
-        alert('盲评模式下请先退出盲评再删除对比目录');
+        alert(t('blind.locked.remove'));
         return;
       }
       foldersRef.current = foldersRef.current.filter((f) => f.path !== path);
@@ -277,7 +278,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
 
   const clearFolders = useCallback(() => {
     if (blindRef.current) {
-      alert('盲评模式下请先退出盲评再清除对比目录');
+      alert(t('blind.locked.clear'));
       return;
     }
     foldersRef.current = [];
@@ -497,7 +498,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
         blind.winLists = winListsFromData(data, blind.aliases);
         forceUpdate();
       } catch (e) {
-        alert(e instanceof Error ? e.message : '保存投票失败');
+        alert(e instanceof Error ? e.message : t('blind.voteFailed'));
       }
     },
     [forceUpdate],

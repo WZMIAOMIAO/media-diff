@@ -1,4 +1,5 @@
 import type { BlindSetupParams, BlindSetupResult, HistogramData } from '../types';
+import { t } from '../i18n/store';
 
 const API_BASE = '/api';
 
@@ -30,7 +31,7 @@ export async function getRoots(): Promise<{ roots: string[] }> {
 // Desktop (Windows).
 export async function getDefaultBrowsePath(): Promise<string> {
   const res = await fetch(`${API_BASE}/filesystem/home`);
-  if (!res.ok) throw new Error('获取默认目录失败');
+  if (!res.ok) throw new Error(t('api.defaultDirFailed'));
   const data = (await res.json()) as { path: string };
   return data.path;
 }
@@ -46,7 +47,7 @@ export async function browseFolder(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || '浏览文件夹失败');
+    throw new Error(err.detail || t('api.browseFailed'));
   }
   return res.json();
 }
@@ -59,7 +60,7 @@ export async function listImages(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
   });
-  if (!res.ok) throw new Error('获取图片列表失败');
+  if (!res.ok) throw new Error(t('api.imageListFailed'));
   return res.json();
 }
 
@@ -77,7 +78,7 @@ export async function fetchImageBlob(path: string): Promise<string> {
       const res = await fetch(
         `${API_BASE}/images/view?path=${encodeURIComponent(path)}`,
       );
-      if (!res.ok) throw new Error(`图片加载失败: ${path}`);
+      if (!res.ok) throw new Error(`${t('api.imageLoadFailed')}: ${path}`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       _imageCache.set(path, url);
@@ -148,7 +149,7 @@ export async function fetchThumbnailBlob(
       const res = await fetch(
         `${API_BASE}/images/thumbnail?path=${encodeURIComponent(path)}&size=${size}`,
       );
-      if (!res.ok) throw new Error(`缩略图加载失败: ${path}`);
+      if (!res.ok) throw new Error(`${t('api.thumbFailed')}: ${path}`);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
       const histogram = parseHistogramHeader(res.headers.get('X-Histogram'));
@@ -171,7 +172,7 @@ export async function fetchHistogram(path: string): Promise<HistogramData> {
   const res = await fetch(
     `${API_BASE}/images/histogram?path=${encodeURIComponent(path)}`,
   );
-  if (!res.ok) throw new Error(`直方图加载失败: ${path}`);
+  if (!res.ok) throw new Error(`${t('api.histogramFailed')}: ${path}`);
   const parsed = (await res.json()) as RawHistogram;
   const data = normalizeHistogram(parsed);
   histogramCache.set(path, data);
@@ -198,7 +199,7 @@ async function postBlind<T>(endpoint: string, body: unknown): Promise<T> {
   });
   const payload = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(payload?.detail || '盲评请求失败');
+    throw new Error(payload?.detail || t('api.blindFailed'));
   }
   return payload as T;
 }

@@ -1,4 +1,5 @@
 import type { HistogramData, VideoBrowseResult, VideoEntry, VideoInfo } from '../types/video';
+import { t } from '../i18n/store';
 
 const API_BASE = '/api';
 
@@ -18,7 +19,7 @@ export async function browseFolderVideo(path: string): Promise<VideoBrowseResult
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || '浏览文件夹失败');
+    throw new Error(err.detail || t('api.browseFailed'));
   }
   const data = (await res.json()) as {
     path: string;
@@ -39,7 +40,7 @@ export async function listVideos(path: string): Promise<{ videos: VideoEntry[] }
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
   });
-  if (!res.ok) throw new Error('获取视频列表失败');
+  if (!res.ok) throw new Error(t('api.videoListFailed'));
   return res.json();
 }
 
@@ -49,7 +50,7 @@ export async function getVideoInfo(path: string): Promise<VideoInfo> {
   const res = await fetch(`${API_BASE}/videos/info?path=${encodeURIComponent(path)}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || '视频信息获取失败');
+    throw new Error(err.detail || t('api.videoInfoFailed'));
   }
   return res.json();
 }
@@ -154,7 +155,7 @@ export async function fetchVideoFrame(
       const res = await fetch(
         `${API_BASE}/videos/frame?path=${encodeURIComponent(videoPath)}&frame=${frame}`,
       );
-      if (!res.ok) throw new Error(`抽帧失败: ${videoPath}#${frame}`);
+      if (!res.ok) throw new Error(`${t('api.frameFailed')}: ${videoPath}#${frame}`);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
       const histogram = parseHistogramHeader(res.headers.get('X-Histogram'));
@@ -184,7 +185,7 @@ export async function fetchVideoFrameHistogram(
   const res = await fetch(
     `${API_BASE}/videos/histogram?path=${encodeURIComponent(videoPath)}&frame=${frame}`,
   );
-  if (!res.ok) throw new Error('帧直方图加载失败');
+  if (!res.ok) throw new Error(t('api.frameHistogramFailed'));
   const parsed = (await res.json()) as RawHistogram;
   const data = normalizeHistogram(parsed);
   frameHistogramCache.set(key, data);
@@ -210,7 +211,7 @@ export async function fetchVideoThumbnail(
       const res = await fetch(
         `${API_BASE}/videos/thumbnail?path=${encodeURIComponent(path)}&size=${size}`,
       );
-      if (!res.ok) throw new Error(`封面缩略图加载失败: ${path}`);
+      if (!res.ok) throw new Error(`${t('api.videoThumbFailed')}: ${path}`);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
       const histogram = parseHistogramHeader(res.headers.get('X-Histogram'));

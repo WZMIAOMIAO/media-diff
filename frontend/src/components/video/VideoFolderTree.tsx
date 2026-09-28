@@ -4,6 +4,7 @@ import type { VideoFolderTreeApi } from '../../hooks/video/useVideoFolderTree';
 import type { VideoTreeNode } from '../../types/video';
 import { getRelativePath, toForwardSlashes } from '../../utils/path';
 import { copyText } from '../../utils/clipboard';
+import { useI18n } from '../../i18n';
 import VideoTreeNodeItem from './VideoTreeNodeItem';
 
 interface VideoFolderTreeProps {
@@ -18,7 +19,16 @@ interface ContextMenuState {
   node: VideoTreeNode;
 }
 
-const MENU_ITEMS = ['添加到多目录对比', '刷新', '复制绝对路径', '复制相对路径'] as const;
+type MenuItem = 'add' | 'refresh' | 'copyAbs' | 'copyRel';
+
+const MENU_ITEMS: MenuItem[] = ['add', 'refresh', 'copyAbs', 'copyRel'];
+
+const MENU_LABEL: Record<MenuItem, string> = {
+  add: 'tree.menu.add',
+  refresh: 'tree.menu.refresh',
+  copyAbs: 'tree.menu.copyAbs',
+  copyRel: 'tree.menu.copyRel',
+};
 
 function getParentPath(path: string): string {
   if (!path) return path;
@@ -33,6 +43,7 @@ function getParentPath(path: string): string {
 }
 
 function VideoFolderTree({ tree, onAddToCompare, onSelectVideo }: VideoFolderTreeProps) {
+  const { t } = useI18n();
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   useEffect(() => {
@@ -54,19 +65,19 @@ function VideoFolderTree({ tree, onAddToCompare, onSelectVideo }: VideoFolderTre
     setContextMenu({ x: e.clientX, y: e.clientY, node });
   };
 
-  const handleMenuClick = (item: string) => {
+  const handleMenuClick = (item: MenuItem) => {
     if (!contextMenu) return;
     const node = contextMenu.node;
     setContextMenu(null);
     // For video file nodes, folder-level actions target the containing folder.
     const folderPath = node.isDir ? node.path : getParentPath(node.path);
-    if (item === '添加到多目录对比') {
+    if (item === 'add') {
       void onAddToCompare(folderPath);
-    } else if (item === '刷新') {
+    } else if (item === 'refresh') {
       void tree.refreshNode(folderPath);
-    } else if (item === '复制绝对路径') {
+    } else if (item === 'copyAbs') {
       void copyText(toForwardSlashes(node.path));
-    } else if (item === '复制相对路径') {
+    } else if (item === 'copyRel') {
       void copyText(getRelativePath(node.path, tree.roots));
     }
   };
@@ -75,7 +86,7 @@ function VideoFolderTree({ tree, onAddToCompare, onSelectVideo }: VideoFolderTre
     <div className="flex-1 min-h-0 overflow-auto py-1">
       {tree.roots.length === 0 ? (
         <div className="px-3 py-2 text-sm text-[#888888]">
-          请输入文件夹路径添加根目录
+          {t('tree.empty')}
         </div>
       ) : (
         tree.roots.map((node) => (
@@ -105,16 +116,16 @@ function VideoFolderTree({ tree, onAddToCompare, onSelectVideo }: VideoFolderTre
             <div
               key={item}
               title={
-                item === '复制绝对路径'
+                item === 'copyAbs'
                   ? toForwardSlashes(contextMenu.node.path)
-                  : item === '复制相对路径'
+                  : item === 'copyRel'
                     ? getRelativePath(contextMenu.node.path, tree.roots)
                     : undefined
               }
               className="px-3 py-1.5 text-sm text-[#e0e0e0] hover:bg-[#3c3c3c] cursor-default"
               onClick={() => handleMenuClick(item)}
             >
-              {item}
+              {t(MENU_LABEL[item])}
             </div>
           ))}
         </div>

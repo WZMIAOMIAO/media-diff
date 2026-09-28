@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useI18n } from '../i18n';
 import VideoTopNav from '../components/video/VideoTopNav';
 import VideoSidebar from '../components/video/VideoSidebar';
 import VideoThumbnailPanel from '../components/video/VideoThumbnailPanel';
@@ -14,6 +15,7 @@ import { useWatermark } from '../hooks/useWatermark';
 import { VIDEO_WATERMARK_KEY } from '../utils/watermarkStorage';
 
 export default function VideoComparePage() {
+  const { t } = useI18n();
   const compare = useVideoCompare();
   const player = useVideoPlayer({
     selectedFolders: compare.selectedFolders,
@@ -52,7 +54,7 @@ export default function VideoComparePage() {
     if (compare.blind) {
       if (
         compare.blind.votedCount > 0 &&
-        !confirm('确定退出盲评模式吗？已投票结果已保存到文件。')
+        !confirm(t('blind.exitConfirm'))
       ) {
         return;
       }
@@ -61,7 +63,7 @@ export default function VideoComparePage() {
       return;
     }
     if (compare.selectedFolders.length < 2) {
-      alert('盲评模式需要至少2个对比文件夹，请先添加');
+      alert(t('blind.needFolders'));
       return;
     }
     setBlindSetupOpen(true);

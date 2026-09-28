@@ -4,6 +4,8 @@ import ColorPickerButton from '../ColorPickerButton';
 import ModeSwitcher from '../ModeSwitcher';
 import HelpButton from '../HelpButton';
 import ShortcutHelpDialog from '../ShortcutHelpDialog';
+import LanguageSwitcher from '../LanguageSwitcher';
+import { useI18n } from '../../i18n';
 
 interface VideoTopNavProps {
   histogramEnabled: boolean;
@@ -26,6 +28,7 @@ function VideoTopNav({
   blindActive,
   onBlindToggle,
 }: VideoTopNavProps) {
+  const { t } = useI18n();
   const [helpOpen, setHelpOpen] = useState(false);
 
   return (
@@ -42,19 +45,19 @@ function VideoTopNav({
             onClick={onWatermarkClick}
             className="text-sm text-[#888888] hover:text-[#e0e0e0] cursor-pointer select-none px-2 py-1 rounded hover:bg-[#2b2b2b]"
           >
-            水印
+            {t('nav.watermark')}
           </button>
           <Toggle
             checked={histogramEnabled}
             onChange={onHistogramToggle}
             color="#4a9eff"
-            label="RGB直方图"
+            label={t('nav.histogram')}
           />
           <Toggle
             checked={blindActive}
             onChange={onBlindToggle}
             color="#ff8c00"
-            label="盲评模式"
+            label={t('nav.blind')}
           />
           <ColorPickerButton
             active={colorPickerEnabled}
@@ -64,6 +67,7 @@ function VideoTopNav({
         </div>
       </div>
       <div className="flex items-center gap-3">
+        <LanguageSwitcher />
         <ModeSwitcher />
         <HelpButton onClick={() => setHelpOpen(true)} />
       </div>

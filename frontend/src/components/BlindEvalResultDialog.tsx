@@ -1,5 +1,6 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { BlindEvalApi } from '../types';
+import { useI18n } from '../i18n';
 
 interface BlindEvalResultDialogProps {
   blind: BlindEvalApi;
@@ -7,6 +8,7 @@ interface BlindEvalResultDialogProps {
 }
 
 function BlindEvalResultDialog({ blind, onClose }: BlindEvalResultDialogProps) {
+  const { t } = useI18n();
   const counts = new Map<string, number>();
   for (const alias of Object.values(blind.aliases)) counts.set(alias, 0);
   for (const alias of blind.votes.values()) {
@@ -32,7 +34,7 @@ function BlindEvalResultDialog({ blind, onClose }: BlindEvalResultDialogProps) {
     >
       <div className="w-[560px] max-h-[80vh] flex flex-col bg-[#2b2b2b] border border-[#3c3c3c] rounded-lg shadow-xl">
         <div className="flex items-center justify-between p-2 border-b border-[#3c3c3c]">
-          <span className="text-sm text-[#e0e0e0]">评测结果（当前份共 {blind.total} 项）</span>
+          <span className="text-sm text-[#e0e0e0]">{t('blind.resultTitle', { total: blind.total })}</span>
           <button
             type="button"
             onClick={onClose}

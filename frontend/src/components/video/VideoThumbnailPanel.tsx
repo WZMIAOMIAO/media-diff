@@ -2,6 +2,7 @@ import { useState, type MouseEvent as ReactMouseEvent } from 'react';
 import type { UseVideoCompareReturn } from '../../hooks/video/useVideoCompare';
 import VideoThumbnailColumn from './VideoThumbnailColumn';
 import Toggle from '../Toggle';
+import { useI18n } from '../../i18n';
 
 interface VideoThumbnailPanelProps {
   compare: UseVideoCompareReturn;
@@ -12,6 +13,7 @@ const MAX_W = 800;
 const DEFAULT_W = 300;
 
 function VideoThumbnailPanel({ compare }: VideoThumbnailPanelProps) {
+  const { t } = useI18n();
   const [width, setWidth] = useState(DEFAULT_W);
   const [collapsed, setCollapsed] = useState(false);
   const [searchInput, setSearchInput] = useState('');
@@ -45,7 +47,7 @@ function VideoThumbnailPanel({ compare }: VideoThumbnailPanelProps) {
         <button
           type="button"
           onClick={() => setCollapsed(false)}
-          title="展开预览图面板"
+          title={t('sidebar.expandFolder')}
           className="mt-2 text-[#888888] hover:text-[#e0e0e0]"
         >
           →
@@ -65,12 +67,12 @@ function VideoThumbnailPanel({ compare }: VideoThumbnailPanelProps) {
         <button
           type="button"
           onClick={() => setCollapsed(true)}
-          title="折叠预览图面板"
+          title={t('sidebar.collapseFolder')}
           className="text-[#888888] hover:text-[#e0e0e0] px-1"
         >
           ←
         </button>
-        <span className="text-sm text-[#e0e0e0] whitespace-nowrap">视频列表</span>
+        <span className="text-sm text-[#e0e0e0] whitespace-nowrap">{t('panel.videoList')}</span>
         {showIntersection && (
           <div className="ml-1">
             <Toggle
@@ -78,7 +80,7 @@ function VideoThumbnailPanel({ compare }: VideoThumbnailPanelProps) {
               onChange={(v) => compare.setIntersectionMode(v)}
               disabled={!!compare.blind}
               color="#4a9eff"
-              label="交集"
+              label={t('panel.intersection')}
             />
           </div>
         )}
@@ -91,14 +93,14 @@ function VideoThumbnailPanel({ compare }: VideoThumbnailPanelProps) {
           onKeyDown={(e) => {
             if (e.key === 'Enter') applySearch();
           }}
-          placeholder="搜索视频..."
+          placeholder={t('common.searchVideos')}
           className="flex-1 min-w-0 px-1.5 py-0.5 text-xs bg-[#333333] border border-[#3c3c3c] rounded text-[#e0e0e0] placeholder:text-[#888888] focus:outline-none focus:border-[#555555]"
         />
         {searchInput && (
           <button
             type="button"
             onClick={clearSearch}
-            title="清除搜索"
+            title={t('panel.clearSearch')}
             className="text-[#888888] hover:text-[#e0e0e0] text-xs shrink-0"
           >
             ×
@@ -108,14 +110,14 @@ function VideoThumbnailPanel({ compare }: VideoThumbnailPanelProps) {
 
       {compare.searchQuery && (
         <div className="px-2 py-1 text-xs text-[#888888] border-b border-[#3c3c3c]">
-          过滤: {compare.searchQuery}
+          {t('panel.filter', { query: compare.searchQuery })}
         </div>
       )}
 
       <div className="flex-1 min-h-0 flex">
         {compare.selectedFolders.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-sm text-[#888888]">
-            请通过右键菜单添加对比文件夹
+            {t('panel.emptyHint')}
           </div>
         ) : (
           compare.selectedFolders.map((f) => {
@@ -143,7 +145,7 @@ function VideoThumbnailPanel({ compare }: VideoThumbnailPanelProps) {
 
       <div
         onMouseDown={startResize}
-        title="拖拽调整宽度"
+        title={t('common.dragResize')}
         className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-10 cursor-col-resize bg-[#555555] hover:bg-[#777777] rounded-l transition-colors flex items-center justify-center"
       >
         <span className="text-[#888888] text-xs leading-none">⋮</span>

@@ -4,6 +4,8 @@ import ColorPickerButton from './ColorPickerButton';
 import ModeSwitcher from './ModeSwitcher';
 import HelpButton from './HelpButton';
 import ShortcutHelpDialog from './ShortcutHelpDialog';
+import LanguageSwitcher from './LanguageSwitcher';
+import { useI18n } from '../i18n';
 
 interface TopNavProps {
   histogramEnabled: boolean;
@@ -24,6 +26,7 @@ function TopNav({
   blindActive,
   onBlindToggle,
 }: TopNavProps) {
+  const { t } = useI18n();
   const [annotation, setAnnotation] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
@@ -41,27 +44,27 @@ function TopNav({
             onClick={onWatermarkClick}
             className="text-sm text-[#888888] hover:text-[#e0e0e0] cursor-pointer select-none px-2 py-1 rounded hover:bg-[#2b2b2b]"
           >
-            水印
+            {t('nav.watermark')}
           </button>
-          <Toggle checked={histogramEnabled} onChange={onHistogramToggle} color="#4a9eff" label="RGB直方图" />
+          <Toggle checked={histogramEnabled} onChange={onHistogramToggle} color="#4a9eff" label={t('nav.histogram')} />
           <Toggle
             checked={annotation}
             onChange={() => {
               if (blindActive) {
-                alert('标注模式和盲评模式不能同时开启，请先关闭当前模式');
+                alert(t('nav.alert.annotationBlindConflict'));
                 return;
               }
               setAnnotation(false);
-              alert('开发中');
+              alert(t('nav.alert.comingSoon'));
             }}
             color="#4a9eff"
-            label="标注模式"
+            label={t('nav.annotation')}
           />
           <Toggle
             checked={blindActive}
             onChange={onBlindToggle}
             color="#ff8c00"
-            label="盲评模式"
+            label={t('nav.blind')}
           />
           <ColorPickerButton
             active={colorPickerEnabled}
@@ -70,6 +73,7 @@ function TopNav({
         </div>
       </div>
       <div className="flex items-center gap-3">
+        <LanguageSwitcher />
         <ModeSwitcher />
         <HelpButton onClick={() => setHelpOpen(true)} />
       </div>

@@ -1,4 +1,5 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
+import { useI18n } from '../../i18n';
 import type { VideoTreeNode } from '../../types/video';
 
 interface VideoTreeNodeItemProps {
@@ -18,6 +19,7 @@ function VideoTreeNodeItem({
   onRemoveRoot,
   onSelectVideo,
 }: VideoTreeNodeItemProps) {
+  const { t } = useI18n();
   const isDir = node.isDir;
   const isRoot = depth === 0;
   // Show the expand arrow for directories that have children OR are not yet
@@ -82,7 +84,7 @@ function VideoTreeNodeItem({
               e.stopPropagation();
               onRemoveRoot(node.path);
             }}
-            title="移除根目录"
+            title={t('common.removeRoot')}
             className="shrink-0 text-[#888888] hover:text-[#ef4444] text-base leading-none px-1"
           >
             ×

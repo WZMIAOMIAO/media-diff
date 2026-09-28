@@ -10,6 +10,7 @@ import OverlayButtons from '../OverlayButtons';
 import ColorReadout, { type SamplePos } from '../ColorReadout';
 import VideoHistogramOverlay from './VideoHistogramOverlay';
 import CopyableFileName from '../CopyableFileName';
+import { useI18n } from '../../i18n';
 
 interface WindowInfo {
   index: number;
@@ -51,6 +52,7 @@ export default function VideoWindow({
   titlePosition = 'top',
   blindVote,
 }: VideoWindowProps) {
+  const { t } = useI18n();
   const { isPlaying, currentFrame, muted } = player;
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -303,7 +305,7 @@ export default function VideoWindow({
             </span>
           </>
         ) : (
-          <span className="text-xs text-[#e0e0e0] truncate">无视频</span>
+          <span className="text-xs text-[#e0e0e0] truncate">{t('window.noVideo')}</span>
         )}
       </span>
       {!isPlaying && video && (
@@ -364,7 +366,7 @@ export default function VideoWindow({
         {!isPlaying && video && (
           <>
             {loadError ? (
-              <span className="text-sm text-[#ef4444]">抽帧失败</span>
+              <span className="text-sm text-[#ef4444]">{t('window.frameExtractFailed')}</span>
             ) : frameUrl ? (
               <>
                 <div
@@ -411,7 +413,7 @@ export default function VideoWindow({
                 )}
               </>
             ) : (
-              <span className="text-sm text-[#888888]">抽帧中...</span>
+              <span className="text-sm text-[#888888]">{t('window.frameExtracting')}</span>
             )}
           </>
         )}
@@ -432,7 +434,7 @@ export default function VideoWindow({
         {blindVote && video && (
           <button
             type="button"
-            title="点赞（每组只能选一个）"
+            title={t('window.vote')}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();

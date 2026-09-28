@@ -5,6 +5,7 @@ import type { WatermarkConfig, SelectedFolder } from '../types';
 import type { FileEntry } from '../api';
 import type { SamplePos } from './ColorReadout';
 import ImageWindow from './ImageWindow';
+import { useI18n } from '../i18n';
 
 interface ImageCompareAreaProps {
   compare: UseImageCompareReturn;
@@ -20,6 +21,7 @@ interface WindowInfo {
 }
 
 function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, watermarkConfigs }: ImageCompareAreaProps) {
+  const { t } = useI18n();
   const sharedZoom = useSharedZoom();
   const { selectedFolders, filteredImages, currentIndices, nextImage, prevImage, blind } = compare;
   const [samplePos, setSamplePos] = useState<SamplePos | null>(null);
@@ -51,7 +53,7 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
   if (selectedFolders.length === 0) {
     return (
       <main className="flex-1 min-w-0 flex items-center justify-center bg-[#1e1e1e]">
-        <span className="text-sm text-[#888888]">请添加对比文件夹后选择图片查看</span>
+        <span className="text-sm text-[#888888]">{t('compare.emptyImage')}</span>
       </main>
     );
   }

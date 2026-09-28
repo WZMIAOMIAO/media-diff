@@ -4,6 +4,7 @@ import type { FolderTreeApi } from '../hooks/useFolderTree';
 import type { TreeNode } from '../types';
 import { getRelativePath, toForwardSlashes } from '../utils/path';
 import { copyText } from '../utils/clipboard';
+import { useI18n } from '../i18n';
 import TreeNodeItem from './TreeNodeItem';
 
 interface FolderTreeProps {
@@ -17,14 +18,19 @@ interface ContextMenuState {
   node: TreeNode;
 }
 
-const MENU_ITEMS = [
-  '添加到多目录对比',
-  '刷新',
-  '复制绝对路径',
-  '复制相对路径',
-] as const;
+type MenuItem = 'add' | 'refresh' | 'copyAbs' | 'copyRel';
+
+const MENU_ITEMS: MenuItem[] = ['add', 'refresh', 'copyAbs', 'copyRel'];
+
+const MENU_LABEL: Record<MenuItem, string> = {
+  add: 'tree.menu.add',
+  refresh: 'tree.menu.refresh',
+  copyAbs: 'tree.menu.copyAbs',
+  copyRel: 'tree.menu.copyRel',
+};
 
 function FolderTree({ tree, onAddToCompare }: FolderTreeProps) {
+  const { t } = useI18n();
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(
     null,
   );
@@ -48,17 +54,17 @@ function FolderTree({ tree, onAddToCompare }: FolderTreeProps) {
     setContextMenu({ x: e.clientX, y: e.clientY, node });
   };
 
-  const handleMenuClick = (item: string) => {
+  const handleMenuClick = (item: MenuItem) => {
     if (!contextMenu) return;
     const node = contextMenu.node;
     setContextMenu(null);
-    if (item === '添加到多目录对比') {
+    if (item === 'add') {
       void onAddToCompare(node.path);
-    } else if (item === '刷新') {
+    } else if (item === 'refresh') {
       void tree.refreshNode(node.path);
-    } else if (item === '复制绝对路径') {
+    } else if (item === 'copyAbs') {
       void copyText(toForwardSlashes(node.path));
-    } else if (item === '复制相对路径') {
+    } else if (item === 'copyRel') {
       void copyText(getRelativePath(node.path, tree.roots));
     }
   };
@@ -67,7 +73,7 @@ function FolderTree({ tree, onAddToCompare }: FolderTreeProps) {
     <div className="flex-1 min-h-0 overflow-auto py-1">
       {tree.roots.length === 0 ? (
         <div className="px-3 py-2 text-sm text-[#888888]">
-          请输入文件夹路径添加根目录
+          {t('tree.empty')}
         </div>
       ) : (
         tree.roots.map((node) => (
@@ -96,16 +102,16 @@ function FolderTree({ tree, onAddToCompare }: FolderTreeProps) {
             <div
               key={item}
               title={
-                item === '复制绝对路径'
+                item === 'copyAbs'
                   ? toForwardSlashes(contextMenu.node.path)
-                  : item === '复制相对路径'
+                  : item === 'copyRel'
                     ? getRelativePath(contextMenu.node.path, tree.roots)
                     : undefined
               }
               className="px-3 py-1.5 text-sm text-[#e0e0e0] hover:bg-[#3c3c3c] cursor-default"
               onClick={() => handleMenuClick(item)}
             >
-              {item}
+              {t(MENU_LABEL[item])}
             </div>
           ))}
         </div>

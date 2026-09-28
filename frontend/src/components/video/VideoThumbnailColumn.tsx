@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type UIEvent } from 'react';
 import type { VideoEntry } from '../../types/video';
 import type { SelectedFolder } from '../../types';
 import VideoThumbnailItem from './VideoThumbnailItem';
+import { useI18n } from '../../i18n';
 
 interface VideoThumbnailColumnProps {
   folder: SelectedFolder;
@@ -21,6 +22,7 @@ function VideoThumbnailColumn({
   currentIndex,
   onSelect,
 }: VideoThumbnailColumnProps) {
+  const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportH, setViewportH] = useState(0);
@@ -76,7 +78,7 @@ function VideoThumbnailColumn({
         {total === 0 ? (
           originalCount === 0 ? null : (
             <div className="flex items-center justify-center h-full text-xs text-[#888888]">
-              无匹配结果
+              {t('column.noMatch')}
             </div>
           )
         ) : (

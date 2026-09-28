@@ -1,21 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useI18n } from '../i18n';
 
 type Mode = 'image' | 'video';
 
-const MODES: { key: Mode; label: string; path: string }[] = [
-  { key: 'image', label: '图像模式', path: '/image' },
-  { key: 'video', label: '视频模式', path: '/video' },
+const MODES: { key: Mode; labelKey: string; path: string }[] = [
+  { key: 'image', labelKey: 'nav.imageMode', path: '/image' },
+  { key: 'video', labelKey: 'nav.videoMode', path: '/video' },
 ];
 
 function ModeSwitcher() {
+  const { t } = useI18n();
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   const current: Mode = location.pathname.startsWith('/video') ? 'video' : 'image';
-  const currentLabel = MODES.find((m) => m.key === current)?.label ?? '图像模式';
+  const currentMode = MODES.find((m) => m.key === current) ?? MODES[0];
+  const currentLabel = t(currentMode.labelKey);
 
   useEffect(() => {
     if (!open) return;
@@ -43,7 +46,7 @@ function ModeSwitcher() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        title="切换模式"
+        title={t('nav.switchMode')}
         className="flex items-center gap-1.5 px-2 py-1 text-sm text-[#e0e0e0] bg-[#333333] border border-[#3c3c3c] rounded hover:border-[#555555]"
       >
         <span>{currentLabel}</span>
@@ -66,7 +69,7 @@ function ModeSwitcher() {
                     : 'text-[#e0e0e0] hover:bg-[#3c3c3c]'
                 }`}
               >
-                <span>{mode.label}</span>
+                <span>{t(mode.labelKey)}</span>
                 {active && <span className="text-xs">✓</span>}
               </button>
             );

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listImages, voteBlindEval, type FileEntry } from '../api';
 import type { BlindEvalApi, BlindSetupResult, SelectedFolder } from '../types';
+import { t } from '../i18n/store';
 
 export type { BlindEvalApi } from '../types';
 
@@ -184,13 +185,13 @@ export function useImageCompare(): UseImageCompareReturn {
   const addFolder = useCallback(
     async (path: string) => {
       if (blindRef.current) {
-        alert('盲评模式下请先退出盲评再添加对比目录');
+        alert(t('blind.locked.add'));
         return;
       }
       const trimmed = path.trim();
       if (!trimmed) return;
       if (foldersRef.current.length >= 4) {
-        alert('不支持超过4张图对比');
+        alert(t('limit.folders'));
         return;
       }
       if (foldersRef.current.some((f) => f.path === trimmed)) return;
@@ -219,7 +220,7 @@ export function useImageCompare(): UseImageCompareReturn {
   const removeFolder = useCallback(
     (path: string) => {
       if (blindRef.current) {
-        alert('盲评模式下请先退出盲评再删除对比目录');
+        alert(t('blind.locked.remove'));
         return;
       }
       foldersRef.current = foldersRef.current.filter((f) => f.path !== path);
@@ -239,7 +240,7 @@ export function useImageCompare(): UseImageCompareReturn {
 
   const clearFolders = useCallback(() => {
     if (blindRef.current) {
-      alert('盲评模式下请先退出盲评再清除对比目录');
+      alert(t('blind.locked.clear'));
       return;
     }
     foldersRef.current = [];
@@ -441,7 +442,7 @@ export function useImageCompare(): UseImageCompareReturn {
         blind.winLists = winListsFromData(data, blind.aliases);
         forceUpdate();
       } catch (e) {
-        alert(e instanceof Error ? e.message : '保存投票失败');
+        alert(e instanceof Error ? e.message : t('blind.voteFailed'));
       }
     },
     [forceUpdate],

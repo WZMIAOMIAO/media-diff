@@ -1,6 +1,7 @@
 import type { VideoPlayerApi } from '../../hooks/video/useVideoPlayer';
 import { SPEEDS } from '../../hooks/video/useVideoPlayer';
 import Toggle from '../Toggle';
+import { useI18n } from '../../i18n';
 
 interface PlayerBarProps {
   player: VideoPlayerApi;
@@ -45,6 +46,7 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
 }
 
 function PlayerBar({ player, mainFps }: PlayerBarProps) {
+  const { t } = useI18n();
   const { isPlaying, currentFrame, baseFrameCount, speed, loop, muted } = player;
   const max = Math.max(1, baseFrameCount);
 
@@ -58,7 +60,7 @@ function PlayerBar({ player, mainFps }: PlayerBarProps) {
       <button
         type="button"
         onClick={player.togglePlay}
-        title={isPlaying ? '暂停 (空格)' : '播放 (空格)'}
+        title={isPlaying ? t('player.pause') : t('player.play')}
         className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[#4a9eff] hover:opacity-90 text-white"
       >
         {isPlaying ? '❚❚' : '▶'}
@@ -68,7 +70,7 @@ function PlayerBar({ player, mainFps }: PlayerBarProps) {
         <button
           type="button"
           onClick={() => player.stepFrame(-1)}
-          title="上一帧 (a)"
+          title={t('player.prevFrame')}
           className="px-2 py-1 text-sm bg-[#333333] border border-[#3c3c3c] rounded hover:border-[#555555] text-[#e0e0e0]"
         >
           ◀|
@@ -76,7 +78,7 @@ function PlayerBar({ player, mainFps }: PlayerBarProps) {
         <button
           type="button"
           onClick={() => player.stepFrame(1)}
-          title="下一帧 (d)"
+          title={t('player.nextFrame')}
           className="px-2 py-1 text-sm bg-[#333333] border border-[#3c3c3c] rounded hover:border-[#555555] text-[#e0e0e0]"
         >
           |▶
@@ -122,13 +124,13 @@ function PlayerBar({ player, mainFps }: PlayerBarProps) {
       </div>
 
       <div className="shrink-0">
-        <Toggle checked={loop} onChange={player.setLoop} color="#4a9eff" label="循环" />
+        <Toggle checked={loop} onChange={player.setLoop} color="#4a9eff" label={t('player.loop')} />
       </div>
 
       <button
         type="button"
         onClick={() => player.setMuted(!muted)}
-        title={muted ? '开启声音' : '关闭声音'}
+        title={muted ? t('player.unmute') : t('player.mute')}
         aria-pressed={!muted}
         className={`shrink-0 w-9 h-9 flex items-center justify-center rounded border ${
           muted

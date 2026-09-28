@@ -3,6 +3,7 @@ import VideoFolderInput from './VideoFolderInput';
 import VideoFolderTree from './VideoFolderTree';
 import { useVideoFolderTree } from '../../hooks/video/useVideoFolderTree';
 import { VIDEO_TREE_KEY } from '../../utils/treeStorage';
+import { useI18n } from '../../i18n';
 import type { UseVideoCompareReturn } from '../../hooks/video/useVideoCompare';
 
 interface VideoSidebarProps {
@@ -14,6 +15,7 @@ const MAX_W = 500;
 const DEFAULT_W = 250;
 
 function VideoSidebar({ compare }: VideoSidebarProps) {
+  const { t } = useI18n();
   const tree = useVideoFolderTree(VIDEO_TREE_KEY);
   const [width, setWidth] = useState(DEFAULT_W);
   const [collapsed, setCollapsed] = useState(false);
@@ -41,7 +43,7 @@ function VideoSidebar({ compare }: VideoSidebarProps) {
         <button
           type="button"
           onClick={() => setCollapsed(false)}
-          title="展开文件夹面板"
+          title={t('sidebar.expandFolder')}
           className="mt-2 text-[#888888] hover:text-[#e0e0e0]"
         >
           →
@@ -59,21 +61,21 @@ function VideoSidebar({ compare }: VideoSidebarProps) {
         <button
           type="button"
           onClick={() => setCollapsed(true)}
-          title="折叠文件夹面板"
+          title={t('sidebar.collapseFolder')}
           className="text-[#888888] hover:text-[#e0e0e0] px-1"
         >
           ←
         </button>
-        <span className="text-sm text-[#e0e0e0]">文件夹</span>
+        <span className="text-sm text-[#e0e0e0]">{t('sidebar.folders')}</span>
       </div>
       <VideoFolderInput onAddRoot={tree.addRoot} />
       <div className="shrink-0 border-b border-[#3c3c3c] max-h-[40%] flex flex-col min-h-0">
         <div className="px-2 py-1 text-xs text-[#888888] border-b border-[#3c3c3c]">
-          已选对比目录
+          {t('sidebar.selectedDirs')}
         </div>
         <div className="flex-1 min-h-0 overflow-auto">
           {compare.selectedFolders.length === 0 ? (
-            <div className="px-2 py-1 text-xs text-[#666666]">暂无</div>
+            <div className="px-2 py-1 text-xs text-[#666666]">{t('sidebar.none')}</div>
           ) : (
             compare.selectedFolders.map((f) => (
               <div
@@ -92,7 +94,7 @@ function VideoSidebar({ compare }: VideoSidebarProps) {
                 <button
                   type="button"
                   onClick={() => compare.removeFolder(f.path)}
-                  title="移除"
+                  title={t('common.remove')}
                   className="shrink-0 text-[#888888] hover:text-[#ef4444] text-base leading-none px-1"
                 >
                   ×
@@ -108,7 +110,7 @@ function VideoSidebar({ compare }: VideoSidebarProps) {
               onClick={() => compare.clearFolders()}
               className="w-full px-2 py-1 text-xs bg-[#333333] border border-[#3c3c3c] rounded hover:border-[#555555]"
             >
-              清除
+              {t('common.clear')}
             </button>
           </div>
         )}
@@ -121,7 +123,7 @@ function VideoSidebar({ compare }: VideoSidebarProps) {
 
       <div
         onMouseDown={startResize}
-        title="拖拽调整宽度"
+        title={t('common.dragResize')}
         className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-10 cursor-col-resize bg-[#555555] hover:bg-[#777777] rounded-l transition-colors flex items-center justify-center"
       >
         <span className="text-[#888888] text-xs leading-none">⋮</span>

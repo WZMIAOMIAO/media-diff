@@ -1,4 +1,5 @@
 import type { FileEntry } from '../api';
+import { useI18n } from '../i18n';
 
 interface OverlayButtonsProps {
   currentIndex: number;
@@ -15,6 +16,7 @@ export default function OverlayButtons({
   onOverlayStart,
   onOverlayEnd,
 }: OverlayButtonsProps) {
+  const { t } = useI18n();
   const others: number[] = [];
   for (let i = 0; i < totalWindows; i++) {
     if (i !== currentIndex) others.push(i);
@@ -33,13 +35,13 @@ export default function OverlayButtons({
         <button
           key={targetIdx}
           type="button"
-          title={`叠${targetIdx + 1}`}
+          title={t('overlay.layer', { n: targetIdx + 1 })}
           onMouseDown={handleDown(targetIdx)}
           onMouseUp={onOverlayEnd}
           onMouseLeave={onOverlayEnd}
           className="px-1.5 py-0.5 text-xs bg-[#333333] border border-[#3c3c3c] rounded text-[#e0e0e0] hover:border-[#555555] select-none"
         >
-          叠{targetIdx + 1}
+          {t('overlay.layer', { n: targetIdx + 1 })}
         </button>
       ))}
     </div>

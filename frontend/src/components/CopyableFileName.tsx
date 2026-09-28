@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { copyText } from '../utils/clipboard';
+import { useI18n } from '../i18n';
 
 interface CopyableFileNameProps {
   name: string;
@@ -14,6 +15,7 @@ interface CopyableFileNameProps {
  * unreliable for very long names).
  */
 export default function CopyableFileName({ name, className = '' }: CopyableFileNameProps) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<number | null>(null);
 
@@ -41,7 +43,7 @@ export default function CopyableFileName({ name, className = '' }: CopyableFileN
       </span>
       <button
         type="button"
-        title="复制文件名"
+        title={t('common.copyFileName')}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={handleCopy}
         className="shrink-0 text-[#888888] hover:text-[#e0e0e0] opacity-60 group-hover:opacity-100 transition-opacity"

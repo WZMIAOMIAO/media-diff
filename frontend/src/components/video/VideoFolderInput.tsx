@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import BrowseFolderDialog from '../BrowseFolderDialog';
 import { getDefaultBrowsePath } from '../../api';
 import type { AddRootResult } from '../../types/video';
+import { useI18n } from '../../i18n';
 
 interface VideoFolderInputProps {
   onAddRoot: (path: string) => Promise<AddRootResult>;
 }
 
 function VideoFolderInput({ onAddRoot }: VideoFolderInputProps) {
+  const { t } = useI18n();
   const [value, setValue] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [defaultPath, setDefaultPath] = useState<string | undefined>(undefined);
@@ -29,9 +31,9 @@ function VideoFolderInput({ onAddRoot }: VideoFolderInputProps) {
     if (!trimmed) return;
     const result = await onAddRoot(trimmed);
     if (result === 'not_exist') {
-      alert('文件夹不存在');
+      alert(t('folderInput.notExist'));
     } else if (result === 'exists') {
-      alert('该路径已添加');
+      alert(t('folderInput.exists'));
     } else {
       setValue('');
     }
@@ -48,13 +50,13 @@ function VideoFolderInput({ onAddRoot }: VideoFolderInputProps) {
           onKeyDown={(e) => {
             if (e.key === 'Enter') void submit();
           }}
-          placeholder="输入文件夹路径后回车..."
+          placeholder={t('folderInput.placeholder')}
           className="flex-1 min-w-0 px-2 py-1 text-sm bg-[#333333] border border-[#3c3c3c] rounded text-[#e0e0e0] placeholder:text-[#888888] focus:outline-none focus:border-[#555555]"
         />
         <button
           type="button"
           onClick={() => setDialogOpen(true)}
-          title="浏览文件夹"
+          title={t('folderInput.browse')}
           className="shrink-0 px-2 py-1 text-sm bg-[#333333] border border-[#3c3c3c] rounded hover:border-[#555555]"
         >
           📁

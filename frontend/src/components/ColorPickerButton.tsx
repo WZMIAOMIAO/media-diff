@@ -1,3 +1,5 @@
+import { useI18n } from '../i18n';
+
 interface ColorPickerButtonProps {
   active: boolean;
   disabled?: boolean;
@@ -5,12 +7,13 @@ interface ColorPickerButtonProps {
 }
 
 function ColorPickerButton({ active, disabled = false, onClick }: ColorPickerButtonProps) {
+  const { t } = useI18n();
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      title={disabled ? '视频播放时不可取色' : '取色（Esc 退出）'}
+      title={disabled ? t('colorPicker.disabled') : t('colorPicker.enabled')}
       aria-pressed={active}
       className={`flex items-center justify-center w-7 h-7 rounded border ${
         disabled

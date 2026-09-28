@@ -8,6 +8,7 @@ import type { VideoEntry } from '../../types/video';
 import type { SamplePos } from '../ColorReadout';
 import VideoWindow from './VideoWindow';
 import PlayerBar from './PlayerBar';
+import { useI18n } from '../../i18n';
 
 const PREFETCH_RANGE = 3;
 
@@ -26,6 +27,7 @@ interface WindowInfo {
 }
 
 function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnabled, watermarkConfigs }: VideoCompareAreaProps) {
+  const { t } = useI18n();
   const sharedZoom = useSharedZoom();
   const { selectedFolders, filteredVideos, currentVideos, videoInfos, nextVideo, prevVideo, blind } = compare;
   const [samplePos, setSamplePos] = useState<SamplePos | null>(null);
@@ -117,7 +119,7 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
     return (
       <main className="flex-1 min-w-0 flex flex-col">
         <div className="flex-1 flex items-center justify-center bg-[#1e1e1e]">
-          <span className="text-sm text-[#888888]">请添加对比文件夹后选择视频查看</span>
+          <span className="text-sm text-[#888888]">{t('compare.emptyVideo')}</span>
         </div>
       </main>
     );

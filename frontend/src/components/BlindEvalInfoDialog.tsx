@@ -1,5 +1,6 @@
 import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { loadBlindEval } from '../api';
+import { useI18n } from '../i18n';
 
 interface BlindEvalInfoDialogProps {
   outputPath: string;
@@ -7,6 +8,7 @@ interface BlindEvalInfoDialogProps {
 }
 
 function BlindEvalInfoDialog({ outputPath, onClose }: BlindEvalInfoDialogProps) {
+  const { t } = useI18n();
   const [content, setContent] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -19,7 +21,7 @@ function BlindEvalInfoDialog({ outputPath, onClose }: BlindEvalInfoDialogProps) 
         if (!cancelled) setContent(JSON.stringify(data, null, 4));
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : '读取失败');
+        if (!cancelled) setError(e instanceof Error ? e.message : t('blind.infoLoadFailed'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -27,7 +29,7 @@ function BlindEvalInfoDialog({ outputPath, onClose }: BlindEvalInfoDialogProps) 
     return () => {
       cancelled = true;
     };
-  }, [outputPath]);
+  }, [outputPath, t]);
 
   const handleBackdropClick = (e: ReactMouseEvent) => {
     if (e.target === e.currentTarget) onClose();
@@ -52,7 +54,7 @@ function BlindEvalInfoDialog({ outputPath, onClose }: BlindEvalInfoDialogProps) 
           </button>
         </div>
         <div className="flex-1 min-h-0 overflow-auto p-2">
-          {loading && <span className="text-sm text-[#888888]">加载中...</span>}
+          {loading && <span className="text-sm text-[#888888]">{t('common.loading')}</span>}
           {error && <span className="text-sm text-[#ef4444]">{error}</span>}
           {!loading && !error && (
             <pre className="text-xs text-[#e0e0e0] whitespace-pre-wrap break-all font-mono">

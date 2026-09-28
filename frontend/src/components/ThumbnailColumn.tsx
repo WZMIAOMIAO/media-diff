@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type UIEvent } from 'react';
 import type { FileEntry } from '../api';
 import type { SelectedFolder } from '../types';
 import ThumbnailItem from './ThumbnailItem';
+import { useI18n } from '../i18n';
 
 interface ThumbnailColumnProps {
   folder: SelectedFolder;
@@ -24,6 +25,7 @@ function ThumbnailColumn({
   currentIndex,
   onSelect,
 }: ThumbnailColumnProps) {
+  const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportH, setViewportH] = useState(0);
@@ -84,7 +86,7 @@ function ThumbnailColumn({
         {total === 0 ? (
           originalCount === 0 ? null : (
             <div className="flex items-center justify-center h-full text-xs text-[#888888]">
-              无匹配结果
+              {t('column.noMatch')}
             </div>
           )
         ) : (

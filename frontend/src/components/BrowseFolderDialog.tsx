@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { browseFolder, getRoots, type FileEntry, type SubDir } from '../api';
+import { useI18n } from '../i18n';
 
 interface BrowseFolderDialogProps {
   onClose: () => void;
@@ -32,6 +33,7 @@ function BrowseFolderDialog({
   includeJson = false,
   defaultPath,
 }: BrowseFolderDialogProps) {
+  const { t } = useI18n();
   const [currentPath, setCurrentPath] = useState('');
   const [inputPath, setInputPath] = useState('');
   const [subdirs, setSubdirs] = useState<SubDir[]>([]);
@@ -50,14 +52,14 @@ function BrowseFolderDialog({
         setSubdirs(result.subdirs);
         setJsonFiles(result.json_files ?? []);
       } catch (e) {
-        setError(e instanceof Error ? e.message : '浏览失败');
+        setError(e instanceof Error ? e.message : t('browse.failed'));
         setSubdirs([]);
         setJsonFiles([]);
       } finally {
         setLoading(false);
       }
     },
-    [includeJson],
+    [includeJson, t],
   );
 
   const defaultPathRef = useRef(defaultPath);
@@ -75,14 +77,14 @@ function BrowseFolderDialog({
         if (cancelled || roots.length === 0) return;
         await navigateTo(roots[0]);
       } catch {
-        if (!cancelled) setError('获取根目录失败');
+        if (!cancelled) setError(t('browse.rootsFailed'));
       }
     };
     void init();
     return () => {
       cancelled = true;
     };
-  }, [navigateTo]);
+  }, [navigateTo, t]);
 
   const atTop = !currentPath || currentPath === '/' || isWindowsDriveRoot(currentPath);
 
@@ -126,7 +128,7 @@ function BrowseFolderDialog({
       setSubdirs(result.subdirs);
       onSelect(result.path);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '浏览失败');
+      setError(e instanceof Error ? e.message : t('browse.failed'));
       setSubdirs([]);
       setJsonFiles([]);
     } finally {
@@ -149,7 +151,7 @@ function BrowseFolderDialog({
             type="button"
             onClick={goUp}
             disabled={atTop}
-            title="返回上级"
+            title={t('browse.back')}
             className="px-2 py-1 text-sm bg-[#333333] border border-[#3c3c3c] rounded hover:border-[#555555] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             ←
@@ -160,20 +162,20 @@ function BrowseFolderDialog({
             onKeyDown={(e) => {
               if (e.key === 'Enter') onInputEnter();
             }}
-            placeholder="输入路径或关键词后回车..."
+            placeholder={t('browse.placeholder')}
             className="flex-1 min-w-0 px-2 py-1 text-sm bg-[#333333] border border-[#3c3c3c] rounded text-[#e0e0e0] placeholder:text-[#888888] focus:outline-none focus:border-[#555555]"
           />
         </div>
 
         <div className="flex-1 min-h-0 overflow-auto p-1">
           {loading && (
-            <div className="px-2 py-2 text-sm text-[#888888]">加载中...</div>
+            <div className="px-2 py-2 text-sm text-[#888888]">{t('common.loading')}</div>
           )}
           {error && (
             <div className="px-2 py-2 text-sm text-[#ef4444]">{error}</div>
           )}
           {!loading && !error && subdirs.length === 0 && jsonFiles.length === 0 && (
-            <div className="px-2 py-2 text-sm text-[#888888]">无子目录</div>
+            <div className="px-2 py-2 text-sm text-[#888888]">{t('browse.noSubdirs')}</div>
           )}
           {!loading &&
             !error &&
@@ -209,7 +211,7 @@ function BrowseFolderDialog({
             onClick={onClose}
             className="px-3 py-1 text-sm bg-[#333333] border border-[#3c3c3c] rounded hover:border-[#555555]"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -217,7 +219,7 @@ function BrowseFolderDialog({
             disabled={!currentPath}
             className="px-3 py-1 text-sm bg-[#4a9eff] border border-[#4a9eff] rounded text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            选择此文件夹
+            {t('browse.select')}
           </button>
         </div>
       </div>
