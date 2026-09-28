@@ -67,7 +67,7 @@ export const zh: Dict = {
   'window.vote': '点赞（每组只能选一张）',
   'compare.emptyImage': '请添加对比文件夹后选择图片查看',
   'compare.emptyVideo': '请添加对比文件夹后选择视频查看',
-  'overlay.layer': '叠{n}',
+  'overlay.fromWindow': '从窗口 {n} 覆盖',
 
   // color picker
   'colorPicker.enabled': '取色（Esc 退出）',
@@ -251,7 +251,7 @@ export const en: Dict = {
   'window.vote': 'Vote (one per group)',
   'compare.emptyImage': 'Add compared folders and select an image',
   'compare.emptyVideo': 'Add compared folders and select a video',
-  'overlay.layer': 'Overlay {n}',
+  'overlay.fromWindow': 'Overlay from window {n}',
 
   // color picker
   'colorPicker.enabled': 'Pick color (Esc to exit)',
