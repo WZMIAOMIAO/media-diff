@@ -93,7 +93,7 @@ function VideoSidebar({ compare }: VideoSidebarProps) {
                   type="button"
                   onClick={() => compare.removeFolder(f.path)}
                   title="移除"
-                  className="shrink-0 text-[#888888] hover:text-[#ef4444] text-xs"
+                  className="shrink-0 text-[#888888] hover:text-[#ef4444] text-base leading-none px-1"
                 >
                   ×
                 </button>

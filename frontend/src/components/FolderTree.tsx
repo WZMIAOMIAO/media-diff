@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { FolderTreeApi } from '../hooks/useFolderTree';
 import type { TreeNode } from '../types';
-import { getRelativePath } from '../utils/path';
+import { getRelativePath, toForwardSlashes } from '../utils/path';
 import { copyText } from '../utils/clipboard';
 import TreeNodeItem from './TreeNodeItem';
 
@@ -57,7 +57,7 @@ function FolderTree({ tree, onAddToCompare }: FolderTreeProps) {
     } else if (item === '刷新') {
       void tree.refreshNode(node.path);
     } else if (item === '复制绝对路径') {
-      void copyText(node.path);
+      void copyText(toForwardSlashes(node.path));
     } else if (item === '复制相对路径') {
       void copyText(getRelativePath(node.path, tree.roots));
     }
@@ -97,7 +97,7 @@ function FolderTree({ tree, onAddToCompare }: FolderTreeProps) {
               key={item}
               title={
                 item === '复制绝对路径'
-                  ? contextMenu.node.path
+                  ? toForwardSlashes(contextMenu.node.path)
                   : item === '复制相对路径'
                     ? getRelativePath(contextMenu.node.path, tree.roots)
                     : undefined

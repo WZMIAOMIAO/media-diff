@@ -2,6 +2,11 @@ export interface PathRoot {
   path: string;
 }
 
+/** Convert all backslashes to forward slashes (Windows paths included). */
+export function toForwardSlashes(path: string): string {
+  return path.replace(/\\/g, '/');
+}
+
 function getPathName(path: string): string {
   if (!path) return '';
   if (path === '/') return '/';
@@ -17,9 +22,9 @@ function getPathName(path: string): string {
  * root directory name as the first path segment.
  *
  * e.g. root ``/data/dataset`` + path ``/data/dataset/cat/1.png`` ->
- * ``dataset/cat/1.png``. The original path separators are preserved. Volume
- * roots (``/`` or a Windows drive root) have no folder name to prepend, so the
- * path below them is returned as-is.
+ * ``dataset/cat/1.png``. Output always uses forward slashes so Windows and
+ * Linux paths look consistent. Volume roots (``/`` or a Windows drive root)
+ * have no folder name to prepend, so the path below them is returned as-is.
  */
 export function getRelativePath(fullPath: string, roots: PathRoot[]): string {
   let best: string | null = null;
@@ -35,17 +40,16 @@ export function getRelativePath(fullPath: string, roots: PathRoot[]): string {
       best = root;
     }
   }
-  if (best === null) return fullPath;
+  if (best === null) return toForwardSlashes(fullPath);
 
   if (best === '/' || /^[a-zA-Z]:$/.test(best)) {
     const rel = fullPath.slice(best.length).replace(/^[/\\]+/, '');
-    return rel || fullPath;
+    return toForwardSlashes(rel || fullPath);
   }
 
   const rootName = getPathName(best);
   const suffix =
     fullPath === best ? '' : fullPath.slice(best.length).replace(/^[/\\]+/, '');
   if (!suffix) return rootName;
-  const sep = fullPath.includes('\\') ? '\\' : '/';
-  return `${rootName}${sep}${suffix}`;
+  return toForwardSlashes(`${rootName}/${suffix}`);
 }

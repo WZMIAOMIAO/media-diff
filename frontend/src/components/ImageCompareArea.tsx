@@ -11,7 +11,6 @@ interface ImageCompareAreaProps {
   histogramEnabled: boolean;
   colorPickerEnabled: boolean;
   watermarkConfigs: Record<number, WatermarkConfig>;
-  onWatermarkConfigsChange: (configs: Record<number, WatermarkConfig>) => void;
 }
 
 interface WindowInfo {

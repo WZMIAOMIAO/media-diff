@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { VideoFolderTreeApi } from '../../hooks/video/useVideoFolderTree';
 import type { VideoTreeNode } from '../../types/video';
-import { getRelativePath } from '../../utils/path';
+import { getRelativePath, toForwardSlashes } from '../../utils/path';
 import { copyText } from '../../utils/clipboard';
 import VideoTreeNodeItem from './VideoTreeNodeItem';
 
@@ -65,7 +65,7 @@ function VideoFolderTree({ tree, onAddToCompare, onSelectVideo }: VideoFolderTre
     } else if (item === '刷新') {
       void tree.refreshNode(folderPath);
     } else if (item === '复制绝对路径') {
-      void copyText(node.path);
+      void copyText(toForwardSlashes(node.path));
     } else if (item === '复制相对路径') {
       void copyText(getRelativePath(node.path, tree.roots));
     }
@@ -106,7 +106,7 @@ function VideoFolderTree({ tree, onAddToCompare, onSelectVideo }: VideoFolderTre
               key={item}
               title={
                 item === '复制绝对路径'
-                  ? contextMenu.node.path
+                  ? toForwardSlashes(contextMenu.node.path)
                   : item === '复制相对路径'
                     ? getRelativePath(contextMenu.node.path, tree.roots)
                     : undefined

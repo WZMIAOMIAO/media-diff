@@ -1,10 +1,15 @@
 import { useState } from 'react';
-import type { SelectedFolder, WatermarkConfig } from '../types';
+import type { SelectedFolder } from '../types';
+import type { WatermarkStyle } from '../utils/watermarkStorage';
 
 interface WatermarkDialogProps {
   folders: SelectedFolder[];
-  configs: Record<number, WatermarkConfig>;
-  onConfigsChange: (configs: Record<number, WatermarkConfig>) => void;
+  style: WatermarkStyle;
+  onStyleChange: (patch: Partial<WatermarkStyle>) => void;
+  texts: Record<number, string>;
+  onTextChange: (index: number, text: string) => void;
+  onFillFolderNames: () => void;
+  onClearTexts: () => void;
   onClose: () => void;
 }
 
@@ -15,58 +20,42 @@ const PRESET_COLORS = [
 
 const LABELS = ['窗口一', '窗口二', '窗口三', '窗口四'];
 
-const DEFAULT: WatermarkConfig = { text: '', color: '#ff0000', fontSize: 24 };
+function clampFontSize(value: number): number {
+  return Math.max(8, Math.min(72, value));
+}
 
 export default function WatermarkDialog({
   folders,
-  configs,
-  onConfigsChange,
+  style,
+  onStyleChange,
+  texts,
+  onTextChange,
+  onFillFolderNames,
+  onClearTexts,
   onClose,
 }: WatermarkDialogProps) {
   // Font size is edited as a free-form string so partial input (e.g. "1" on the
-  // way to "18") is not clamped mid-typing. The config only updates once the
-  // value is a valid number, and it is clamped when the field loses focus.
-  const [fontDrafts, setFontDrafts] = useState<Record<number, string>>({});
+  // way to "18") is not clamped mid-typing. The style only updates once the
+  // value is valid, and it is clamped when the field loses focus.
+  const [fontDraft, setFontDraft] = useState<string | null>(null);
+  const fontSizeValue = fontDraft ?? String(style.fontSize);
 
-  const update = (i: number, patch: Partial<WatermarkConfig>) => {
-    const cur = configs[i] ?? DEFAULT;
-    onConfigsChange({ ...configs, [i]: { ...cur, ...patch } });
+  const changeFontSize = (raw: string) => {
+    setFontDraft(raw);
+    const n = parseInt(raw, 10);
+    if (!Number.isNaN(n) && n >= 8 && n <= 72) onStyleChange({ fontSize: n });
   };
 
-  const changeFontSize = (i: number, raw: string) => {
-    setFontDrafts((d) => ({ ...d, [i]: raw }));
-    const n = parseInt(raw, 10);
-    if (!Number.isNaN(n) && n >= 8 && n <= 72) update(i, { fontSize: n });
-  };
-
-  const commitFontSize = (i: number) => {
-    const raw = fontDrafts[i];
-    if (raw === undefined) return;
-    const n = parseInt(raw, 10);
+  const commitFontSize = () => {
+    if (fontDraft === null) return;
+    const n = parseInt(fontDraft, 10);
     if (Number.isNaN(n)) {
-      setFontDrafts((d) => {
-        const next = { ...d };
-        delete next[i];
-        return next;
-      });
+      setFontDraft(null);
       return;
     }
-    const clamped = Math.max(8, Math.min(72, n));
-    update(i, { fontSize: clamped });
-    setFontDrafts((d) => ({ ...d, [i]: String(clamped) }));
-  };
-
-  const clearAll = () => {
-    onConfigsChange({});
-  };
-
-  const fillFolderNames = () => {
-    const next: Record<number, WatermarkConfig> = { ...configs };
-    folders.forEach((f, i) => {
-      const cur = next[i] ?? DEFAULT;
-      next[i] = { ...cur, text: f.name };
-    });
-    onConfigsChange(next);
+    const clamped = clampFontSize(n);
+    onStyleChange({ fontSize: clamped });
+    setFontDraft(String(clamped));
   };
 
   const backdropClick = (e: React.MouseEvent) => {
@@ -78,83 +67,120 @@ export default function WatermarkDialog({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       onClick={backdropClick}
     >
-      <div className="w-[480px] max-h-[80vh] overflow-auto bg-[#2b2b2b] border border-[#3c3c3c] rounded-lg shadow-xl">
-        <div className="px-4 py-2 border-b border-[#3c3c3c] text-sm text-[#e0e0e0] font-bold">
-          水印设置
+      <div className="w-[440px] max-h-[82vh] flex flex-col bg-[#2b2b2b] border border-[#3c3c3c] rounded-xl shadow-2xl overflow-hidden">
+        <div className="flex items-center px-4 h-11 shrink-0 border-b border-[#3c3c3c]">
+          <span className="text-sm font-medium text-[#e8e8e8]">水印设置</span>
         </div>
 
-        <div className="p-3 space-y-3">
-          {folders.map((f, i) => {
-            const cfg = configs[i] ?? DEFAULT;
-            return (
-              <div key={f.path} className="p-2 bg-[#333333] rounded border border-[#3c3c3c]">
-                <div className="text-xs text-[#888888] mb-1">
-                  {LABELS[i] ?? `窗口${i + 1}`} — {f.name}
-                </div>
-                <div className="flex items-center gap-2 mb-2">
-                  <input
-                    type="text"
-                    value={cfg.text}
-                    onChange={(e) => update(i, { text: e.target.value })}
-                    placeholder="水印文字"
-                    className="flex-1 min-w-0 px-2 py-1 text-sm bg-[#1e1e1e] border border-[#3c3c3c] rounded text-[#e0e0e0] focus:outline-none focus:border-[#555555]"
+        {/* 全局样式：颜色与字号对所有窗口统一生效 */}
+        <div className="p-3 border-b border-[#3c3c3c]">
+          <div className="rounded-lg bg-[#313131] border border-[#3c3c3c] p-3">
+            <div className="flex items-baseline gap-2 mb-2.5">
+              <span className="text-xs text-[#e0e0e0]">统一样式</span>
+              <span className="text-[11px] text-[#777777]">应用到所有窗口</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 w-8 text-xs text-[#888888]">颜色</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {PRESET_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    title={c}
+                    onClick={() => onStyleChange({ color: c })}
+                    className={`w-5 h-5 rounded border transition-transform hover:scale-110 ${
+                      style.color.toLowerCase() === c ? 'border-[#4a9eff]' : 'border-[#555555]'
+                    }`}
+                    style={{ backgroundColor: c }}
                   />
-                  <input
-                    type="number"
-                    min={8}
-                    max={72}
-                    value={fontDrafts[i] ?? String(cfg.fontSize)}
-                    onChange={(e) => changeFontSize(i, e.target.value)}
-                    onBlur={() => commitFontSize(i)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                    }}
-                    className="w-14 px-1 py-1 text-sm bg-[#1e1e1e] border border-[#3c3c3c] rounded text-[#e0e0e0]"
-                  />
-                  <span className="text-xs text-[#888888]">px</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {PRESET_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => update(i, { color: c })}
-                      className={`w-5 h-5 rounded border-2 ${cfg.color === c ? 'border-[#4a9eff]' : 'border-transparent'}`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
+                ))}
+                <label
+                  title="自定义颜色"
+                  className="relative w-5 h-5 rounded border border-[#555555] overflow-hidden cursor-pointer hover:scale-110 transition-transform"
+                  style={{
+                    background:
+                      'conic-gradient(#ff0000,#ffff00,#00ff00,#00ffff,#0000ff,#ff00ff,#ff0000)',
+                  }}
+                >
                   <input
                     type="color"
-                    value={cfg.color}
-                    onChange={(e) => update(i, { color: e.target.value })}
-                    className="w-6 h-6 bg-transparent border border-[#3c3c3c] rounded cursor-pointer"
+                    value={style.color}
+                    onChange={(e) => onStyleChange({ color: e.target.value })}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   />
-                </div>
+                </label>
               </div>
-            );
-          })}
+              <span className="ml-1 text-[11px] font-mono text-[#c0c0c0] tracking-wide">
+                {style.color}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 mt-3">
+              <span className="shrink-0 w-8 text-xs text-[#888888]">字号</span>
+              <input
+                type="number"
+                min={8}
+                max={72}
+                value={fontSizeValue}
+                onChange={(e) => changeFontSize(e.target.value)}
+                onBlur={commitFontSize}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                }}
+                className="w-20 pl-3 pr-8 py-1 text-sm text-right bg-[#1e1e1e] border border-[#3c3c3c] rounded-md text-[#e0e0e0] focus:outline-none focus:border-[#4a9eff] transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <span className="text-xs text-[#888888]">px</span>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center justify-between px-4 py-2 border-t border-[#3c3c3c]">
+        {/* 各窗口文字 */}
+        <div className="flex-1 min-h-0 overflow-auto p-3 space-y-2.5">
+          {folders.map((f, i) => (
+            <div
+              key={f.path}
+              className="rounded-lg bg-[#313131] border border-[#3c3c3c] p-3 transition-colors hover:border-[#4a4a4a]"
+            >
+              <div className="flex items-baseline gap-2 mb-2">
+                <span className="shrink-0 text-xs text-[#e0e0e0]">
+                  {LABELS[i] ?? `窗口${i + 1}`}
+                </span>
+                <span className="min-w-0 truncate text-xs text-[#777777]" title={f.name}>
+                  {f.name}
+                </span>
+              </div>
+              <input
+                type="text"
+                value={texts[i] ?? ''}
+                onChange={(e) => onTextChange(i, e.target.value)}
+                placeholder="输入水印文字"
+                className="w-full px-2.5 py-1.5 text-sm bg-[#1e1e1e] border border-[#3c3c3c] rounded-md text-[#e0e0e0] placeholder:text-[#666666] focus:outline-none focus:border-[#4a9eff] transition-colors"
+              />
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between px-4 py-2.5 border-t border-[#3c3c3c]">
           <button
             type="button"
-            onClick={fillFolderNames}
-            className="px-3 py-1 text-sm bg-[#333333] border border-[#3c3c3c] rounded text-[#e0e0e0] hover:border-[#555555]"
+            onClick={onFillFolderNames}
+            className="px-3 py-1.5 text-xs bg-[#333333] border border-[#3c3c3c] rounded-md text-[#c0c0c0] hover:border-[#555555] hover:text-[#e0e0e0] transition-colors"
           >
             填充文件夹名
           </button>
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={clearAll}
-              className="px-3 py-1 text-sm bg-[#333333] border border-[#3c3c3c] rounded text-[#e0e0e0] hover:border-[#555555]"
+              onClick={onClearTexts}
+              className="px-3 py-1.5 text-xs bg-[#333333] border border-[#3c3c3c] rounded-md text-[#c0c0c0] hover:border-[#555555] hover:text-[#e0e0e0] transition-colors"
             >
               清除全部
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1 text-sm bg-[#4a9eff] border border-[#4a9eff] rounded text-white hover:opacity-90"
+              className="px-3 py-1.5 text-xs bg-[#4a9eff] border border-[#4a9eff] rounded-md text-white hover:opacity-90 transition-opacity"
             >
               关闭
             </button>

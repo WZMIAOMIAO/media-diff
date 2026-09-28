@@ -10,15 +10,14 @@ import BlindEvalInfoDialog from '../components/BlindEvalInfoDialog';
 import BlindEvalResultDialog from '../components/BlindEvalResultDialog';
 import { useImageCompare } from '../hooks/useImageCompare';
 import { useImagePrefetch } from '../hooks/useImagePrefetch';
-import type { WatermarkConfig } from '../types';
+import { useWatermark } from '../hooks/useWatermark';
+import { IMAGE_WATERMARK_KEY } from '../utils/watermarkStorage';
 
 export default function ImageComparePage() {
   const compare = useImageCompare();
   const [histogramEnabled, setHistogramEnabled] = useState(false);
   const [colorPickerEnabled, setColorPickerEnabled] = useState(false);
-  const [watermarkConfigs, setWatermarkConfigs] = useState<
-    Record<number, WatermarkConfig>
-  >({});
+  const watermark = useWatermark(IMAGE_WATERMARK_KEY);
   const [watermarkDialogOpen, setWatermarkDialogOpen] = useState(false);
   const [blindSetupOpen, setBlindSetupOpen] = useState(false);
   const [blindInfoOpen, setBlindInfoOpen] = useState(false);
@@ -76,8 +75,7 @@ export default function ImageComparePage() {
           compare={compare}
           histogramEnabled={histogramEnabled}
           colorPickerEnabled={colorPickerEnabled}
-          watermarkConfigs={watermarkConfigs}
-          onWatermarkConfigsChange={setWatermarkConfigs}
+          watermarkConfigs={watermark.configs}
         />
       </div>
       {compare.blind && (
@@ -90,8 +88,12 @@ export default function ImageComparePage() {
       {watermarkDialogOpen && (
         <WatermarkDialog
           folders={compare.selectedFolders}
-          configs={watermarkConfigs}
-          onConfigsChange={setWatermarkConfigs}
+          style={watermark.style}
+          onStyleChange={watermark.setStyle}
+          texts={watermark.texts}
+          onTextChange={watermark.setText}
+          onFillFolderNames={() => watermark.fillFolderNames(compare.selectedFolders)}
+          onClearTexts={watermark.clearTexts}
           onClose={() => setWatermarkDialogOpen(false)}
         />
       )}
