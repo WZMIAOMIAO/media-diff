@@ -23,6 +23,7 @@ interface WindowInfo {
 function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, watermarkConfigs }: ImageCompareAreaProps) {
   const { t } = useI18n();
   const sharedZoom = useSharedZoom();
+  const { zoomByAt, resetFit } = sharedZoom;
   const { selectedFolders, filteredImages, currentIndices, nextImage, prevImage, blind } = compare;
   const [samplePos, setSamplePos] = useState<SamplePos | null>(null);
 
@@ -34,18 +35,29 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
     if (!colorPickerEnabled) setSamplePos(null);
   }, [colorPickerEnabled]);
 
+  // keyboard: ←/→ switch image, ↑/↓ zoom (synced, centred)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') prevImage();
-      else if (e.key === 'ArrowRight') nextImage();
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key === 'ArrowLeft') {
+        prevImage();
+      } else if (e.key === 'ArrowRight') {
+        nextImage();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        zoomByAt(1.15, null, null);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        zoomByAt(1 / 1.15, null, null);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [nextImage, prevImage]);
+  }, [nextImage, prevImage, zoomByAt]);
 
   const indicesKey = selectedFolders.map((f) => currentIndices.get(f.path) ?? 0).join(',');
 
-  const { resetFit } = sharedZoom;
   useEffect(() => {
     resetFit();
   }, [indicesKey, resetFit]);
@@ -82,7 +94,10 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
     const idx = blind ? blind.index : currentIndices.get(w.folder.path) ?? 0;
     return (
       <ImageWindow
-        key={w.folder.path}
+        // Key by visual position, not folder path: in blind mode the folder
+        // shown in a window changes between groups, and re-keying would remount
+        // the window (losing hover state, which breaks the numeric-key overlay).
+        key={i}
         index={i}
         folder={w.folder}
         image={w.image}

@@ -29,6 +29,7 @@ interface WindowInfo {
 function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnabled, watermarkConfigs }: VideoCompareAreaProps) {
   const { t } = useI18n();
   const sharedZoom = useSharedZoom();
+  const { zoomByAt } = sharedZoom;
   const { selectedFolders, filteredVideos, currentVideos, videoInfos, nextVideo, prevVideo, blind } = compare;
   const [samplePos, setSamplePos] = useState<SamplePos | null>(null);
 
@@ -48,8 +49,9 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
     [selectedFolders, currentVideos],
   );
 
-  // keyboard: ←/→ switch video, a/d step frame, space play/pause
-  const { stepFrame, togglePlay } = player;
+  // keyboard: ←/→ switch video, a/d step frame, space play/pause, ↑/↓ zoom
+  // (zoom only while paused; playback resets to fit)
+  const { stepFrame, togglePlay, isPlaying } = player;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -60,6 +62,14 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
         nextVideo();
+      } else if (e.key === 'ArrowUp') {
+        if (isPlaying) return;
+        e.preventDefault();
+        zoomByAt(1.15, null, null);
+      } else if (e.key === 'ArrowDown') {
+        if (isPlaying) return;
+        e.preventDefault();
+        zoomByAt(1 / 1.15, null, null);
       } else if (e.key === 'a' || e.key === 'A') {
         e.preventDefault();
         stepFrame(-1);
@@ -73,7 +83,7 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [nextVideo, prevVideo, stepFrame, togglePlay]);
+  }, [nextVideo, prevVideo, stepFrame, togglePlay, zoomByAt, isPlaying]);
 
   // reset fit on video switch
   const { resetFit } = sharedZoom;
@@ -83,7 +93,6 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
 
   // zoom is not applied while playing, so reset to fit when playback starts:
   // pausing then keeps the fit size instead of jumping back to the old zoom.
-  const { isPlaying } = player;
   useEffect(() => {
     if (isPlaying) resetFit();
   }, [isPlaying, resetFit]);
@@ -144,7 +153,10 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
     const w = allWindows[i];
     return (
       <VideoWindow
-        key={w.folderPath}
+        // Key by visual position, not folder path: in blind mode the folder
+        // shown in a window changes between groups, and re-keying would remount
+        // the window (losing hover state, which breaks the numeric-key overlay).
+        key={i}
         index={i}
         folderPath={w.folderPath}
         video={w.video}

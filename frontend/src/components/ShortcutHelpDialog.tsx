@@ -20,6 +20,7 @@ function buildSections(mode: HelpMode, t: Translate): ShortcutSection[] {
     title: t('help.group.view'),
     items: [
       { keys: [t('help.key.wheel')], desc: t('help.wheel') },
+      { keys: ['↑', '↓'], desc: t('help.zoom') },
       { keys: [t('help.key.drag')], desc: t('help.drag') },
       { keys: [t('help.key.dblclick')], desc: t('help.dblclick') },
     ],

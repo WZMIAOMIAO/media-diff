@@ -6,6 +6,7 @@ import type { VideoEntry, VideoInfo } from '../../types/video';
 import { fetchVideoFrame } from '../../api/video';
 import { getVideoStreamUrl } from '../../api/video';
 import { clientToUV, getContentBox, EYEDROPPER_CURSOR } from '../../utils/colorSample';
+import { isPointerInside } from '../../utils/pointer';
 import OverlayButtons from '../OverlayButtons';
 import ColorReadout, { type SamplePos } from '../ColorReadout';
 import VideoHistogramOverlay from './VideoHistogramOverlay';
@@ -169,18 +170,17 @@ export default function VideoWindow({
     };
   }, [overlayVideoPath, effFrame, isPlaying]);
 
-  // keyboard overlay (paused only)
+  // keyboard overlay (paused only). Always registered; the target window is
+  // decided at key press time from the actual pointer position (falling back
+  // to React hover), so it survives windows re-rendering after group switches.
   useEffect(() => {
-    if (!isHovered || isPlaying) {
-      setOverlayVideoPath(null);
-      return;
-    }
     const onKeyDown = (e: KeyboardEvent) => {
+      if (isPlaying) return;
       const num = parseInt(e.key, 10);
-      if (num >= 1 && num <= allWindows.length && num - 1 !== index) {
-        const target = allWindows[num - 1];
-        if (target?.video) setOverlayVideoPath(target.video.path);
-      }
+      if (!(num >= 1 && num <= allWindows.length && num - 1 !== index)) return;
+      if (!isHovered && !isPointerInside(outerRef.current?.getBoundingClientRect())) return;
+      const target = allWindows[num - 1];
+      if (target?.video) setOverlayVideoPath(target.video.path);
     };
     const onKeyUp = (e: KeyboardEvent) => {
       const num = parseInt(e.key, 10);
@@ -328,6 +328,7 @@ export default function VideoWindow({
       onMouseLeave={() => {
         setIsHovered(false);
         onMouseUp();
+        setOverlayVideoPath(null);
       }}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}

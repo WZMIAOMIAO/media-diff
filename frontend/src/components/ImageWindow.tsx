@@ -4,6 +4,7 @@ import type { SelectedFolder, WatermarkConfig } from '../types';
 import type { FileEntry } from '../api';
 import { fetchImageBlob, fetchHistogram, histogramCache } from '../api';
 import { clientToUV, getContentBox, EYEDROPPER_CURSOR } from '../utils/colorSample';
+import { isPointerInside } from '../utils/pointer';
 import OverlayButtons from './OverlayButtons';
 import HistogramOverlay from './HistogramOverlay';
 import ColorReadout, { type SamplePos } from './ColorReadout';
@@ -111,16 +112,17 @@ export default function ImageWindow({
   }, [overlayPath]);
 
   useEffect(() => {
-    if (!isHovered) {
-      setOverlayPath(null);
-      return;
-    }
+    // The handler is always registered; the target window is decided at key
+    // press time from the actual pointer position (falling back to React's
+    // hover state). This keeps the numeric-key overlay working even when
+    // mouseenter/mouseleave did not fire (e.g. a modal closed under a
+    // stationary cursor, or windows re-render after switching groups).
     const onKeyDown = (e: KeyboardEvent) => {
       const num = parseInt(e.key, 10);
-      if (num >= 1 && num <= allWindows.length && num - 1 !== index) {
-        const target = allWindows[num - 1];
-        if (target?.image) setOverlayPath(target.image.path);
-      }
+      if (!(num >= 1 && num <= allWindows.length && num - 1 !== index)) return;
+      if (!isHovered && !isPointerInside(outerRef.current?.getBoundingClientRect())) return;
+      const target = allWindows[num - 1];
+      if (target?.image) setOverlayPath(target.image.path);
     };
     const onKeyUp = (e: KeyboardEvent) => {
       const num = parseInt(e.key, 10);
@@ -284,7 +286,7 @@ export default function ImageWindow({
       ref={outerRef}
       className="relative h-full w-full overflow-hidden bg-[#1e1e1e] flex flex-col select-none"
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => { setIsHovered(false); onMouseUp(); }}
+      onMouseLeave={() => { setIsHovered(false); onMouseUp(); setOverlayPath(null); }}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
