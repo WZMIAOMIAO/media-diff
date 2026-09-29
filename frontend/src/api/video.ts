@@ -1,4 +1,4 @@
-import type { HistogramData, VideoBrowseResult, VideoEntry, VideoInfo } from '../types/video';
+import type { HistogramData, TranscodeStatus, VideoBrowseResult, VideoEntry, VideoInfo } from '../types/video';
 import { t } from '../i18n/store';
 
 const API_BASE = '/api';
@@ -59,6 +59,25 @@ export async function getVideoInfo(path: string): Promise<VideoInfo> {
 
 export function getVideoStreamUrl(path: string): string {
   return `${API_BASE}/videos/stream?path=${encodeURIComponent(path)}`;
+}
+
+// ---- transcode (browser-unsupported codecs) ----
+
+export async function startVideoTranscode(path: string): Promise<TranscodeStatus> {
+  const res = await fetch(
+    `${API_BASE}/videos/transcode?path=${encodeURIComponent(path)}`,
+    { method: 'POST' },
+  );
+  if (!res.ok) throw new Error(t('api.transcodeStartFailed'));
+  return res.json();
+}
+
+export async function getVideoTranscodeStatus(path: string): Promise<TranscodeStatus> {
+  const res = await fetch(
+    `${API_BASE}/videos/transcode-status?path=${encodeURIComponent(path)}`,
+  );
+  if (!res.ok) throw new Error(t('api.transcodeStatusFailed'));
+  return res.json();
 }
 
 // ---- histogram helpers ----

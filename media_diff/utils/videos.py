@@ -38,6 +38,29 @@ class FFmpegError(Exception):
 # non-native videos never write to the same temp file at once.
 _transcode_lock = threading.Lock()
 
+# Per-source transcode state, keyed by normcase(abspath). Lets the frontend
+# poll progress while the (synchronous) transcode runs, and lets us coalesce
+# concurrent requests for the same video.
+_transcode_states: dict[str, dict] = {}
+_transcode_threads: dict[str, threading.Thread] = {}
+_transcode_states_lock = threading.Lock()
+
+
+def _transcode_key(path: str) -> str:
+    return os.path.normcase(os.path.abspath(path))
+
+
+def _set_transcode_state(path: str, **fields) -> None:
+    key = _transcode_key(path)
+    with _transcode_states_lock:
+        _transcode_states.setdefault(key, {}).update(fields)
+
+
+def _get_transcode_state(path: str) -> dict:
+    with _transcode_states_lock:
+        return dict(_transcode_states.get(_transcode_key(path)) or {})
+
+
 
 def _run(cmd: list[str], timeout: float = 60.0) -> bytes:
     """Run a subprocess and return stdout bytes. Raises FFmpegError on failure."""
@@ -59,17 +82,70 @@ def _run(cmd: list[str], timeout: float = 60.0) -> bytes:
     return proc.stdout
 
 
+def _run_transcode(
+    cmd: list[str],
+    duration: float,
+    on_progress,
+    timeout: float = 1800.0,
+) -> None:
+    """Run an ffmpeg transcode, reporting progress parsed from ``-progress``.
+
+    ffmpeg is told to write machine-readable progress (``out_time_us=...``) to
+    stdout. stderr is merged into the same pipe so it cannot deadlock and so we
+    can surface the tail of the log if the process fails. ``on_progress`` is
+    called with a 0.0–1.0 fraction.
+    """
+    try:
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+        )
+    except FileNotFoundError as exc:
+        raise FFmpegError("ffmpeg/ffprobe 未安装或不在 PATH 中") from exc
+
+    tail: list[str] = []
+    try:
+        assert proc.stdout is not None
+        for raw in proc.stdout:
+            line = raw.decode("utf-8", errors="ignore").strip()
+            if not line:
+                continue
+            tail.append(line)
+            if len(tail) > 40:
+                del tail[0]
+            if line.startswith(("out_time_us=", "out_time_ms=")):
+                try:
+                    micros = int(line.split("=", 1)[1])
+                except ValueError:
+                    continue
+                if duration > 0:
+                    on_progress(min(1.0, micros / 1_000_000 / duration))
+            elif line == "progress=end":
+                on_progress(1.0)
+        returncode = proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        proc.kill()
+        proc.wait()
+        raise FFmpegError("ffmpeg/ffprobe 执行超时") from exc
+    if returncode != 0:
+        raise FFmpegError("\n".join(tail[-6:]) or "ffmpeg/ffprobe 执行失败")
+
+
+
 def probe_video(path: str) -> dict:
     """Probe video metadata.
 
     Uses ffprobe when available (more accurate); otherwise falls back to
     parsing `ffmpeg -i` stderr output.
 
-    Returns dict with: width, height, fps, frame_count, duration, codec, format.
+    Returns dict with: width, height, fps, frame_count, duration, codec,
+    format, browser_playable.
     """
     if FFPROBE_BIN:
-        return _probe_via_ffprobe(path)
-    return _probe_via_ffmpeg(path)
+        info = _probe_via_ffprobe(path)
+    else:
+        info = _probe_via_ffmpeg(path)
+    info["browser_playable"] = _codec_browser_safe(path, info.get("codec", ""))
+    return info
 
 
 def _probe_via_ffprobe(path: str) -> dict:
@@ -258,6 +334,45 @@ def is_native_video(path: str) -> bool:
     return ext in NATIVE_VIDEO_EXTENSIONS
 
 
+# Codecs the browser can actually decode for each native container. The
+# <video> element picks a decoder from the codec, not the file extension, so an
+# ``.mp4`` holding MPEG-4 Part 2 (``mpeg4``), HEVC, ProRes, etc. is served
+# happily but renders as a black first frame. Such files must be transcoded.
+_BROWSER_SAFE_CODECS: dict[str, set[str]] = {
+    ".mp4": {"h264", "avc1", "avc"},
+    ".webm": {"vp8", "vp9", "av1", "vp10"},
+}
+
+
+def is_browser_playable(path: str) -> bool:
+    """Whether a native-extension video is likely playable by the browser.
+
+    Returns ``True`` when the codec is in the safe set, or when it cannot be
+    probed (optimistically serve the original rather than transcode blindly).
+    Non-native extensions return ``False``.
+    """
+    if os.path.splitext(path)[1].lower() not in _BROWSER_SAFE_CODECS:
+        return False
+    try:
+        info = get_video_info(path)
+    except FFmpegError:
+        return True
+    return _codec_browser_safe(path, info.get("codec", ""))
+
+
+def _codec_browser_safe(path: str, codec: str) -> bool:
+    """Whether ``codec`` in the container implied by ``path`` is playable.
+
+    A missing/unknown codec is treated as playable (optimistic).
+    """
+    safe = _BROWSER_SAFE_CODECS.get(os.path.splitext(path)[1].lower())
+    if not safe:
+        return False
+    if not codec:
+        return True
+    return codec.lower() in safe
+
+
 def extract_frame(path: str, frame_no: int, fps: Optional[float] = None) -> bytes:
     """Extract a single frame as JPEG bytes via ffmpeg.
 
@@ -410,12 +525,81 @@ def _transcode_cache_path(path: str) -> str:
     return os.path.join(cache_root, f"{h}.mp4")
 
 
+def _transcode_cache_ready(path: str) -> bool:
+    """Whether a valid cached transcode exists for ``path`` (mtime+size match)."""
+    out_path = _transcode_cache_path(path)
+    meta_path = out_path + ".meta"
+    if not (os.path.exists(out_path) and os.path.exists(meta_path)):
+        return False
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+        return (
+            meta.get("mtime") == os.path.getmtime(path)
+            and meta.get("size") == os.path.getsize(path)
+        )
+    except (ValueError, OSError):
+        return False
+
+
+def transcode_status(path: str) -> dict:
+    """Return the transcode state for ``path``.
+
+    States: ``none`` (not started), ``pending`` (queued), ``running``
+    (in progress with a 0.0–1.0 ``progress``), ``done``, ``error``.
+    """
+    try:
+        if _transcode_cache_ready(path):
+            return {"state": "done", "progress": 1.0}
+    except OSError:
+        pass
+    state = _get_transcode_state(path)
+    if not state:
+        return {"state": "none", "progress": 0.0}
+    return {
+        "state": state.get("state", "none"),
+        "progress": round(float(state.get("progress", 0.0)), 4),
+        "error": state.get("error"),
+    }
+
+
+def start_transcode_async(path: str) -> dict:
+    """Start (or join) a background transcode for ``path``.
+
+    Idempotent: concurrent calls for the same video share one worker. Returns
+    the current :func:`transcode_status`.
+    """
+    if _transcode_cache_ready(path):
+        _set_transcode_state(path, state="done", progress=1.0, error=None)
+        return {"state": "done", "progress": 1.0}
+
+    key = _transcode_key(path)
+    with _transcode_states_lock:
+        running = _transcode_threads.get(key)
+        if running is not None and running.is_alive():
+            return transcode_status(path)
+        _transcode_states[key] = {"state": "pending", "progress": 0.0, "error": None}
+
+    def worker() -> None:
+        try:
+            transcode_to_mp4(path)
+        except Exception as exc:  # surfaced to the client via transcode_status
+            _set_transcode_state(path, state="error", error=str(exc))
+
+    thread = threading.Thread(target=worker, name="transcode", daemon=True)
+    with _transcode_states_lock:
+        _transcode_threads[key] = thread
+    thread.start()
+    return {"state": "pending", "progress": 0.0}
+
+
 def transcode_to_mp4(path: str) -> str:
-    """Transcode a non-native video to a cached h264/aac mp4 file.
+    """Transcode a video to a cached h264/aac mp4 file.
 
     Returns the path to the transcoded mp4 (which supports Range seeking).
-    Reuses an existing cache file if it exists and mtime matches (stored in a
-    sidecar .meta json). Otherwise transcodes and caches.
+    Reuses an existing cache file if it exists and mtime+size match (stored in
+    a sidecar .meta json). Otherwise transcodes and caches, reporting progress
+    through :func:`transcode_status`.
     """
     try:
         mtime = os.path.getmtime(path)
@@ -426,16 +610,21 @@ def transcode_to_mp4(path: str) -> str:
     meta_path = out_path + ".meta"
 
     with _transcode_lock:
-        if os.path.exists(out_path) and os.path.exists(meta_path):
-            try:
-                with open(meta_path, "r", encoding="utf-8") as f:
-                    meta = json.load(f)
-                if meta.get("mtime") == mtime and meta.get("size") == os.path.getsize(path):
-                    return out_path
-            except (ValueError, OSError):
-                pass
+        if _transcode_cache_ready(path):
+            _set_transcode_state(path, state="done", progress=1.0, error=None)
+            return out_path
+
+        duration = 0.0
+        try:
+            duration = get_video_info(path).get("duration") or 0.0
+        except FFmpegError:
+            pass
+
+        _set_transcode_state(path, state="running", progress=0.0, error=None)
 
         # Transcode to a normal (faststart) mp4. Use fast preset for speed.
+        # The temp file ends in ".tmp", so the muxer must be forced explicitly
+        # with -f mp4 (ffmpeg cannot infer it from the extension).
         tmp_path = out_path + f".{os.getpid()}.{threading.get_ident()}.tmp"
         cmd = [
             FFMPEG_BIN,
@@ -448,19 +637,28 @@ def transcode_to_mp4(path: str) -> str:
             "-c:a", "aac",
             "-b:a", "128k",
             "-movflags", "+faststart",
+            "-nostats",
+            "-progress", "pipe:1",
+            "-f", "mp4",
             tmp_path,
         ]
+
+        def report(fraction: float) -> None:
+            _set_transcode_state(path, state="running", progress=fraction)
+
         try:
-            _run(cmd, timeout=1800.0)
+            _run_transcode(cmd, duration, report, timeout=1800.0)
             os.replace(tmp_path, out_path)
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump({"mtime": mtime, "size": os.path.getsize(path)}, f)
-        except Exception:
+            _set_transcode_state(path, state="done", progress=1.0, error=None)
+        except Exception as exc:
             if os.path.exists(tmp_path):
                 try:
                     os.remove(tmp_path)
                 except OSError:
                     pass
+            _set_transcode_state(path, state="error", error=str(exc))
             raise
     return out_path
 
@@ -558,12 +756,14 @@ def cleanup_transcode_cache(max_entries: int = 20) -> None:
 def get_playable_path(path: str) -> str:
     """Return a playable file path for <video>.
 
-    Native formats (mp4/webm) return the original path directly. Non-native
-    formats are transcoded to a cached mp4 (supports Range seeking).
+    Native formats (mp4/webm) whose codec the browser supports return the
+    original path directly. Every other video (non-native containers, or native
+    containers holding a browser-unsupported codec such as MPEG-4 Part 2/HEVC)
+    is transcoded to a cached h264 mp4.
     """
-    if is_native_video(path):
+    if is_native_video(path) and is_browser_playable(path):
         return path
     # Verify ffmpeg is available before transcoding
     if shutil.which(FFMPEG_BIN) is None:
-        raise FFmpegError("非原生格式需要 ffmpeg 转码，但 ffmpeg 未安装")
+        raise FFmpegError("视频需要转码，但 ffmpeg 未安装")
     return transcode_to_mp4(path)

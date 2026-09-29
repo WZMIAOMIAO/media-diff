@@ -15,8 +15,24 @@ export interface VideoInfo {
   duration: number;
   codec: string;
   format: string;
+  /** 后端探测：该编码浏览器是否可直接解码（false 时需转码） */
+  browser_playable?: boolean;
   /** 前端注入：该 info 对应的视频路径，用于追踪刷新 */
   path?: string;
+}
+
+export type TranscodeState =
+  | 'none'
+  | 'pending'
+  | 'running'
+  | 'done'
+  | 'error'
+  | 'not_needed';
+
+export interface TranscodeStatus {
+  state: TranscodeState;
+  progress: number;
+  error?: string | null;
 }
 
 export interface VideoTreeNode {

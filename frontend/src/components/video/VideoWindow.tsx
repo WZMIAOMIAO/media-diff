@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SharedZoomApi } from '../../hooks/useSharedZoom';
 import type { VideoPlayerApi } from '../../hooks/video/useVideoPlayer';
 import type { WatermarkConfig } from '../../types';
-import type { VideoEntry, VideoInfo } from '../../types/video';
+import type { TranscodeStatus, VideoEntry, VideoInfo } from '../../types/video';
 import { fetchVideoFrame } from '../../api/video';
 import { getVideoStreamUrl } from '../../api/video';
+import { getVideoTranscodeStatus, startVideoTranscode } from '../../api/video';
 import { clientToUV, getContentBox, EYEDROPPER_CURSOR } from '../../utils/colorSample';
 import { isPointerInside } from '../../utils/pointer';
 import OverlayButtons from '../OverlayButtons';
@@ -78,6 +79,7 @@ export default function VideoWindow({
   const [isHovered, setIsHovered] = useState(false);
   const [overlayVideoPath, setOverlayVideoPath] = useState<string | null>(null);
   const [overlayUrl, setOverlayUrl] = useState<string | null>(null);
+  const [transcode, setTranscode] = useState<TranscodeStatus | null>(null);
 
   const outerRef = useRef<HTMLDivElement>(null);
   const imgContainerRef = useRef<HTMLDivElement>(null);
@@ -121,6 +123,42 @@ export default function VideoWindow({
       .join(' · ') || t('videoMeta.unavailable');
   const { zoom, panX, panY } = sharedZoom;
   const canDrag = zoom > 1 && !isPlaying;
+
+  // The browser cannot decode this codec, so the backend transcodes it first.
+  const needsTranscode = !!video && videoInfo?.browser_playable === false;
+  const transcodeDone = !needsTranscode || transcode?.state === 'done';
+  const transcodeFailed = needsTranscode && transcode?.state === 'error';
+  const videoPath = video?.path ?? null;
+
+  // Kick off / join the background transcode and poll its progress so the user
+  // sees "正在转码 x%" instead of a silently hanging player.
+  useEffect(() => {
+    if (!videoPath || !needsTranscode) {
+      setTranscode(null);
+      return;
+    }
+    let cancelled = false;
+    let timer: number | null = null;
+    const poll = async () => {
+      try {
+        const status = await getVideoTranscodeStatus(videoPath);
+        if (cancelled) return;
+        setTranscode(status);
+        if (status.state !== 'done' && status.state !== 'error') {
+          timer = window.setTimeout(poll, 500);
+        }
+      } catch {
+        if (cancelled) return;
+        timer = window.setTimeout(poll, 1000);
+      }
+    };
+    void startVideoTranscode(videoPath).catch(() => {});
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [videoPath, needsTranscode]);
 
   // load current frame when paused
   // Clamp currentFrame to this window's own frame_count so that when videos
@@ -341,6 +379,24 @@ export default function VideoWindow({
             >
               {metaShort || '—'}
             </span>
+            {needsTranscode && (
+              <span
+                className={`shrink-0 rounded px-1 text-[10px] leading-4 ${
+                  transcodeFailed
+                    ? 'bg-[#7f1d1d] text-[#fca5a5]'
+                    : 'bg-[#78350f] text-[#fbbf24]'
+                }`}
+                title={
+                  transcodeFailed
+                    ? t('window.transcodeFailed')
+                    : t('window.codecUnsupported')
+                }
+              >
+                {transcodeFailed
+                  ? t('window.transcodeFailed')
+                  : t('window.codecUnsupported')}
+              </span>
+            )}
           </>
         ) : (
           <span className="text-xs text-[#e0e0e0] truncate">{t('window.noVideo')}</span>
@@ -389,10 +445,18 @@ export default function VideoWindow({
         {/* video element: always mounted, visible only when playing */}
         {video && (
           <video
-            src={getVideoStreamUrl(video.path)}
+            src={transcodeDone ? getVideoStreamUrl(video.path) : undefined}
             ref={setVideoEl}
             onTimeUpdate={(e) => {
               player.onMainTimeUpdate(folderPath, e.currentTarget.currentTime);
+            }}
+            onCanPlay={(e) => {
+              // If the user pressed play while a transcode was still running,
+              // the src only appears once it finishes; start playback then.
+              if (isPlaying) {
+                e.currentTarget.playbackRate = player.speed;
+                void e.currentTarget.play().catch(() => {});
+              }
             }}
             onEnded={() => player.onVideoEnded(folderPath)}
             playsInline
@@ -455,6 +519,30 @@ export default function VideoWindow({
               <span className="text-sm text-[#888888]">{t('window.frameExtracting')}</span>
             )}
           </>
+        )}
+
+        {needsTranscode && !transcodeDone && (
+          <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-black/50 px-4 text-center">
+            {transcodeFailed ? (
+              <span className="text-sm text-[#ef4444]">
+                {t('window.transcodeFailed')}
+              </span>
+            ) : (
+              <>
+                <span className="text-sm text-[#e0e0e0]">
+                  {t('window.transcodeProgress', {
+                    percent: Math.round((transcode?.progress ?? 0) * 100),
+                  })}
+                </span>
+                <div className="h-1 w-40 max-w-full overflow-hidden rounded-full bg-[#3c3c3c]">
+                  <div
+                    className="h-full bg-[#ff8c00] transition-[width] duration-200"
+                    style={{ width: `${Math.round((transcode?.progress ?? 0) * 100)}%` }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
         )}
 
         {video && watermarkConfig?.text && (

@@ -9,7 +9,10 @@ from media_diff.utils.videos import (
     extract_frame_with_histogram,
     get_playable_path,
     get_video_info,
+    is_browser_playable,
     make_video_thumbnail,
+    start_transcode_async,
+    transcode_status,
 )
 
 router = APIRouter(prefix="/api/videos", tags=["videos"])
@@ -81,6 +84,33 @@ def video_stream(path: str = Query(..., description="视频文件绝对路径"))
         raise HTTPException(status_code=403, detail="无权限访问该路径")
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"无法读取视频文件: {exc}")
+
+
+@router.post("/transcode")
+def start_transcode(path: str = Query(..., description="视频文件绝对路径")):
+    """Kick off a background transcode for a browser-unsupported video.
+
+    Returns immediately; poll ``GET /api/videos/transcode-status`` for progress.
+    """
+    try:
+        normalized = _validate_video_path(path)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="无权限访问该路径")
+
+    if is_browser_playable(normalized):
+        return {"state": "not_needed", "progress": 1.0}
+    return start_transcode_async(normalized)
+
+
+@router.get("/transcode-status")
+def get_transcode_status(path: str = Query(..., description="视频文件绝对路径")):
+    """Return transcode progress for a video (``none``/``pending``/``running``/
+    ``done``/``error``)."""
+    try:
+        normalized = _validate_video_path(path)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="无权限访问该路径")
+    return transcode_status(normalized)
 
 
 @router.get("/frame")
