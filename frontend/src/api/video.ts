@@ -120,7 +120,7 @@ interface FrameEntry {
 }
 
 const _frameCache = new Map<string, FrameEntry>();
-const _frameInflight = new Map<string, Promise<FrameEntry>>();
+const _frameInflight = new Map<string, { promise: Promise<FrameEntry>; controller: AbortController }>();
 export const frameHistogramCache = new Map<string, HistogramData>();
 
 // Upper bound for cached frames. The "live" working set per window is only
@@ -158,6 +158,7 @@ function frameKey(videoPath: string, frame: number): string {
 export async function fetchVideoFrame(
   videoPath: string,
   frame: number,
+  options?: { signal?: AbortSignal },
 ): Promise<FrameEntry> {
   const key = frameKey(videoPath, frame);
   const cached = _frameCache.get(key);
@@ -167,26 +168,40 @@ export async function fetchVideoFrame(
     _frameCache.set(key, cached);
     return cached;
   }
-  const inflight = _frameInflight.get(key);
-  if (inflight) return inflight;
-  const promise = (async () => {
-    try {
-      const res = await fetch(
-        `${API_BASE}/videos/frame?path=${encodeURIComponent(videoPath)}&frame=${frame}`,
-      );
-      if (!res.ok) throw new Error(`${t('api.frameFailed')}: ${videoPath}#${frame}`);
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const histogram = parseHistogramHeader(res.headers.get('X-Histogram'));
-      const entry: FrameEntry = { blobUrl, histogram };
-      putFrameCache(key, entry);
-      if (histogram) frameHistogramCache.set(key, histogram);
-      return entry;
-    } finally {
-      _frameInflight.delete(key);
-    }
-  })();
-  _frameInflight.set(key, promise);
+
+  let inflight = _frameInflight.get(key);
+  if (!inflight) {
+    const controller = new AbortController();
+    const promise = (async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE}/videos/frame?path=${encodeURIComponent(videoPath)}&frame=${frame}`,
+          { signal: controller.signal },
+        );
+        if (!res.ok) throw new Error(`${t('api.frameFailed')}: ${videoPath}#${frame}`);
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const histogram = parseHistogramHeader(res.headers.get('X-Histogram'));
+        const entry: FrameEntry = { blobUrl, histogram };
+        putFrameCache(key, entry);
+        if (histogram) frameHistogramCache.set(key, histogram);
+        return entry;
+      } finally {
+        if (_frameInflight.get(key)?.controller === controller) _frameInflight.delete(key);
+      }
+    })();
+    inflight = { promise, controller };
+    _frameInflight.set(key, inflight);
+  }
+
+  // Link the caller's signal to the shared request: aborting any caller
+  // cancels the (now-unwanted) extraction and frees the browser connection.
+  const { promise, controller } = inflight;
+  const signal = options?.signal;
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
   return promise;
 }
 

@@ -12,7 +12,11 @@ from typing import Optional
 
 from PIL import Image
 
-from media_diff.config import NATIVE_VIDEO_EXTENSIONS, VIDEO_TRANSCODE_CACHE_DIR
+from media_diff.config import (
+    NATIVE_VIDEO_EXTENSIONS,
+    VIDEO_EXTRACT_CONCURRENCY,
+    VIDEO_TRANSCODE_CACHE_DIR,
+)
 from media_diff.utils.images import calculate_histogram
 
 # ffmpeg binary: prefer env var, then imageio-ffmpeg bundled binary,
@@ -416,11 +420,21 @@ def extract_frame(path: str, frame_no: int, fps: Optional[float] = None) -> byte
     return out
 
 
+# Bound concurrent ffmpeg frame extractions and de-duplicate identical
+# (path, frame) requests. Without this, rapid stepping spawns a process per
+# request and saturates the CPU, which then stalls the frame the user is on.
+_extract_semaphore = threading.BoundedSemaphore(VIDEO_EXTRACT_CONCURRENCY)
+_extract_inflight: dict[tuple[str, int], threading.Event] = {}
+_extract_inflight_lock = threading.Lock()
+
+
 def extract_frame_with_histogram(path: str, frame_no: int) -> tuple[bytes, str]:
     """Extract frame JPEG + base64-encoded histogram (computed on the frame).
 
     Mirrors the image thumbnail X-Histogram mechanism so the frontend can
-    reuse its histogram cache/rendering logic.
+    reuse its histogram cache/rendering logic. Concurrent requests for the same
+    frame share one ffmpeg run, and the number of concurrent ffmpeg processes
+    is capped by ``VIDEO_EXTRACT_CONCURRENCY``.
     """
     from media_diff.utils.video_cache import video_frame_cache
 
@@ -433,18 +447,47 @@ def extract_frame_with_histogram(path: str, frame_no: int) -> tuple[bytes, str]:
     if cached is not None:
         return cached["jpeg_bytes"], cached["histogram_b64"]
 
-    jpeg_bytes = extract_frame(path, frame_no)
+    key = (path, frame_no)
+    with _extract_inflight_lock:
+        event = _extract_inflight.get(key)
+        leader = event is None
+        if leader:
+            event = threading.Event()
+            _extract_inflight[key] = event
 
-    with Image.open(BytesIO(jpeg_bytes)) as img:
-        rgb = img.convert("RGB")
-        histogram = calculate_histogram(rgb)
+    if not leader:
+        # Another request is already extracting this exact frame; wait for it
+        # instead of spawning a duplicate ffmpeg process.
+        event.wait(timeout=60)
+        cached = video_frame_cache.get(path, frame_no)
+        if cached is not None:
+            return cached["jpeg_bytes"], cached["histogram_b64"]
+        # Leader failed; fall through and do the work ourselves.
 
-    histogram_b64 = base64.b64encode(
-        json.dumps(histogram).encode("utf-8")
-    ).decode("ascii")
+    try:
+        with _extract_semaphore:
+            cached = video_frame_cache.get(path, frame_no)
+            if cached is not None:
+                return cached["jpeg_bytes"], cached["histogram_b64"]
 
-    video_frame_cache.put(path, frame_no, jpeg_bytes, histogram_b64, mtime)
-    return jpeg_bytes, histogram_b64
+            jpeg_bytes = extract_frame(path, frame_no)
+
+            with Image.open(BytesIO(jpeg_bytes)) as img:
+                rgb = img.convert("RGB")
+                histogram = calculate_histogram(rgb)
+
+            histogram_b64 = base64.b64encode(
+                json.dumps(histogram).encode("utf-8")
+            ).decode("ascii")
+
+            video_frame_cache.put(path, frame_no, jpeg_bytes, histogram_b64, mtime)
+            return jpeg_bytes, histogram_b64
+    finally:
+        if leader:
+            with _extract_inflight_lock:
+                if _extract_inflight.get(key) is event:
+                    _extract_inflight.pop(key, None)
+            event.set()
 
 
 def make_video_thumbnail(path: str, size: int = 200) -> tuple[bytes, str]:

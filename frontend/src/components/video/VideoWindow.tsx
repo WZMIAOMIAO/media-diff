@@ -80,6 +80,7 @@ export default function VideoWindow({
   const [overlayVideoPath, setOverlayVideoPath] = useState<string | null>(null);
   const [overlayUrl, setOverlayUrl] = useState<string | null>(null);
   const [transcode, setTranscode] = useState<TranscodeStatus | null>(null);
+  const [frameTick, setFrameTick] = useState(0);
 
   const outerRef = useRef<HTMLDivElement>(null);
   const imgContainerRef = useRef<HTMLDivElement>(null);
@@ -88,6 +89,17 @@ export default function VideoWindow({
   const dragRef = useRef<{ startX: number; startY: number; basePanX: number; basePanY: number } | null>(null);
   const zoomByAtRef = useRef(sharedZoom.zoomByAt);
   zoomByAtRef.current = sharedZoom.zoomByAt;
+
+  // Frame loading is coalesced to one in-flight request per window: while a
+  // request is running, newer steps just update `pendingFrameRef`, and the
+  // latest frame is fetched when the current one finishes. This bounds ffmpeg
+  // concurrency and always converges to the frame the user is on.
+  const frameAbortRef = useRef<AbortController | null>(null);
+  const pendingFrameRef = useRef<number | null>(null);
+  const frameLoadingRef = useRef(false);
+  const frameRetriesRef = useRef(0);
+  const prefetchAbortRef = useRef<AbortController | null>(null);
+  const pumpFrameRef = useRef<() => void>(() => {});
 
   // Stable ref callback: registerVideoEl is stable, so the callback identity
   // does not change on every render (avoids ref(null)/ref(el) churn).
@@ -169,62 +181,94 @@ export default function VideoWindow({
       ? Math.min(currentFrame, videoInfo.frame_count)
       : currentFrame;
   const loadedVideoPathRef = useRef<string | null>(null);
+
+  // Assign the pump on every render so its async callbacks always see the
+  // latest props/state (video, isPlaying, ...).
+  pumpFrameRef.current = () => {
+    if (isPlaying || !video) return;
+    if (frameLoadingRef.current) return; // coalesce: latest pending wins
+    const frame = pendingFrameRef.current;
+    if (frame === null) return;
+    pendingFrameRef.current = null;
+    frameLoadingRef.current = true;
+    const controller = new AbortController();
+    frameAbortRef.current = controller;
+    void fetchVideoFrame(video.path, frame, { signal: controller.signal })
+      .then(({ blobUrl }) => {
+        frameLoadingRef.current = false;
+        if (controller.signal.aborted) return;
+        frameRetriesRef.current = 0;
+        setFrameUrl(blobUrl);
+        setLoadError(false);
+        setFrameTick((t) => t + 1);
+        pumpFrameRef.current();
+      })
+      .catch(() => {
+        frameLoadingRef.current = false;
+        if (controller.signal.aborted) return;
+        if (frameRetriesRef.current < 3) {
+          frameRetriesRef.current += 1;
+          if (pendingFrameRef.current === null) pendingFrameRef.current = frame;
+          pumpFrameRef.current();
+        } else {
+          setLoadError(true);
+        }
+      });
+  };
+
+  // Reset when the video changes or playback starts/stops: cancel any in-flight
+  // extraction (its blob would be for the wrong video / play state).
   useEffect(() => {
-    if (isPlaying || !video) {
+    frameAbortRef.current?.abort();
+    frameAbortRef.current = null;
+    frameLoadingRef.current = false;
+    pendingFrameRef.current = null;
+    frameRetriesRef.current = 0;
+    if (!video || isPlaying) {
       setFrameUrl(null);
       loadedVideoPathRef.current = null;
       return;
     }
-    // When the video itself changes, clear the old frame immediately so the
-    // (already-revoked) previous blob URL is never rendered as a broken image.
     if (loadedVideoPathRef.current !== video.path) {
-      setFrameUrl(null);
       loadedVideoPathRef.current = video.path;
+      setFrameUrl(null);
+      setNaturalSize({ w: 0, h: 0 });
     }
-    let cancelled = false;
-    let retries = 0;
     setLoadError(false);
-    setNaturalSize({ w: 0, h: 0 });
-    const load = () => {
-      if (cancelled) return;
-      fetchVideoFrame(video.path, effFrame)
-        .then(({ blobUrl }) => {
-          if (cancelled) return;
-          setFrameUrl(blobUrl);
-          setLoadError(false);
-        })
-        .catch(() => {
-          if (cancelled) return;
-          if (retries < 3) {
-            retries++;
-            load();
-          } else {
-            setLoadError(true);
-          }
-        });
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
+  }, [video, isPlaying]);
+
+  // Queue the current frame. Consecutive steps while a fetch is in flight are
+  // coalesced by the pump.
+  useEffect(() => {
+    if (isPlaying || !video) return;
+    pendingFrameRef.current = effFrame;
+    pumpFrameRef.current();
   }, [video, effFrame, isPlaying]);
 
-  // prefetch neighbor frames (paused only)
+  // Prefetch neighbor frames, but only after the current frame has settled and
+  // after a short idle delay, so it never competes with the frame being viewed.
   useEffect(() => {
     if (isPlaying || !video) return;
     const maxFrame = videoInfo?.frame_count ?? 0;
-    const toFetch: Array<{ path: string; frame: number }> = [];
-    for (let d = -PREFETCH_RANGE; d <= PREFETCH_RANGE; d++) {
-      let f = effFrame + d;
-      if (f < 1) continue;
-      if (maxFrame > 0 && f > maxFrame) f = maxFrame;
-      toFetch.push({ path: video.path, frame: f });
-    }
-    for (const item of toFetch) {
-      void fetchVideoFrame(item.path, item.frame).catch(() => {});
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [video?.path, effFrame, isPlaying]);
+    const videoPath = video.path;
+    const timer = window.setTimeout(() => {
+      if (frameLoadingRef.current || pendingFrameRef.current !== null) return;
+      const controller = new AbortController();
+      prefetchAbortRef.current = controller;
+      for (let d = -PREFETCH_RANGE; d <= PREFETCH_RANGE; d++) {
+        if (d === 0) continue;
+        let f = effFrame + d;
+        if (f < 1) continue;
+        if (maxFrame > 0 && f > maxFrame) f = maxFrame;
+        void fetchVideoFrame(videoPath, f, { signal: controller.signal }).catch(() => {});
+      }
+    }, 200);
+    return () => {
+      window.clearTimeout(timer);
+      prefetchAbortRef.current?.abort();
+      prefetchAbortRef.current = null;
+    };
+  }, [video, effFrame, isPlaying, videoInfo?.frame_count, frameTick]);
 
   // overlay frame load
   useEffect(() => {

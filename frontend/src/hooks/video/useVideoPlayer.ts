@@ -158,13 +158,16 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
   }, []);
 
   const play = useCallback(() => {
+    // The paused view is an ffmpeg-extracted image; stepping while paused no
+    // longer seeks the <video> elements, so position them right before playing.
+    seekAllVideos(currentFrameRef.current);
     setIsPlaying(true);
     isPlayingRef.current = true;
     for (const el of videoRefs.current.values()) {
       el.playbackRate = speedRef.current;
       void el.play().catch(() => {});
     }
-  }, []);
+  }, [seekAllVideos]);
 
   const pause = useCallback(() => {
     setIsPlaying(false);
@@ -204,10 +207,16 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
 
   const stepFrame = useCallback(
     (delta: number) => {
-      const next = Math.max(1, currentFrameRef.current + delta);
-      seekToFrame(next);
+      // Only advance the frame counter here. Seeking every <video> on each step
+      // is expensive under rapid A/D; the position is synced on play instead.
+      const max = baseFrameCount > 0 ? baseFrameCount : Number.MAX_SAFE_INTEGER;
+      const next = Math.max(1, Math.min(currentFrameRef.current + delta, max));
+      setCurrentFrame(next);
+      setIsPlaying(false);
+      isPlayingRef.current = false;
+      for (const el of videoRefs.current.values()) el.pause();
     },
-    [seekToFrame],
+    [baseFrameCount, setCurrentFrame],
   );
 
   const onMainTimeUpdate = useCallback(

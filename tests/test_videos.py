@@ -166,3 +166,57 @@ def test_transcode_status_and_async(tmp_path, monkeypatch):
             break
         time.sleep(0.05)
     assert videos.transcode_status(str(src))["state"] == "done"
+
+
+def test_extract_frame_inflight_dedup(tmp_path, monkeypatch):
+    """Concurrent requests for the same frame share a single ffmpeg run."""
+    import threading
+    import time
+    from io import BytesIO
+
+    from PIL import Image
+
+    from media_diff.utils import videos
+    from media_diff.utils.video_cache import video_frame_cache
+
+    src = tmp_path / "v.mp4"
+    src.write_bytes(b"x")
+
+    buf = BytesIO()
+    Image.new("RGB", (2, 2), (10, 20, 30)).save(buf, format="JPEG")
+    jpeg = buf.getvalue()
+
+    calls = {"n": 0}
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_extract(path, frame_no):
+        calls["n"] += 1
+        started.set()
+        release.wait(5)
+        return jpeg
+
+    monkeypatch.setattr(videos, "extract_frame", fake_extract)
+
+    path = str(src)
+    frame = 42
+    video_frame_cache._cache.pop((path, frame), None)  # noqa: SLF001 - test cleanup
+
+    results = []
+
+    def worker():
+        results.append(videos.extract_frame_with_histogram(path, frame))
+
+    t1 = threading.Thread(target=worker)
+    t2 = threading.Thread(target=worker)
+    t1.start()
+    assert started.wait(5)
+    t2.start()
+    time.sleep(0.3)  # let t2 join the in-flight request
+    release.set()
+    t1.join(10)
+    t2.join(10)
+
+    assert calls["n"] == 1
+    assert len(results) == 2
+    assert results[0][0] == jpeg and results[1][0] == jpeg

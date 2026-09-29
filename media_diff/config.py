@@ -32,5 +32,8 @@ NATIVE_VIDEO_EXTENSIONS: set[str] = {".mp4", ".webm"}
 VIDEO_THUMBNAIL_CACHE_MAX = 500
 VIDEO_FRAME_CACHE_MAX = 1000
 VIDEO_INFO_CACHE_MAX = 200
+# Upper bound on concurrent ffmpeg frame extractions. Rapid A/D stepping can
+# otherwise spawn hundreds of competing ffmpeg processes and starve the CPU.
+VIDEO_EXTRACT_CONCURRENCY = 4
 VIDEO_TRANSCODE_CACHE_DIR = "_video_transcode_cache"
 
