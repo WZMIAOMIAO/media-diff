@@ -25,6 +25,7 @@ export const zh: Dict = {
   'nav.videoMode': '视频模式',
   'nav.switchMode': '切换模式',
   'nav.help': '使用帮助',
+  'nav.shortcuts': '快捷键',
   'nav.language': '语言',
   'nav.alert.annotationBlindConflict': '标注模式和盲评模式不能同时开启，请先关闭当前模式',
   'nav.alert.comingSoon': '开发中',
@@ -209,6 +210,7 @@ export const en: Dict = {
   'nav.videoMode': 'Video',
   'nav.switchMode': 'Switch mode',
   'nav.help': 'Help',
+  'nav.shortcuts': 'Shortcuts',
   'nav.language': 'Language',
   'nav.alert.annotationBlindConflict':
     'Annotation and Blind Review cannot be enabled at the same time. Please turn off the current mode first.',
