@@ -37,6 +37,22 @@ interface VideoWindowProps {
 
 const PREFETCH_RANGE = 3;
 
+/** Render fps without trailing zeros, e.g. 29.97 -> "29.97", 30 -> "30". */
+function formatFps(fps: number): string {
+  return String(parseFloat(fps.toFixed(2)));
+}
+
+/** Render seconds as m:ss, or h:mm:ss for videos of an hour or longer. */
+function formatDuration(seconds: number): string {
+  const total = Math.round(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const ss = String(s).padStart(2, '0');
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${ss}`;
+  return `${m}:${ss}`;
+}
+
 export default function VideoWindow({
   index,
   folderPath,
@@ -84,6 +100,25 @@ export default function VideoWindow({
 
   const resolution =
     videoInfo && videoInfo.width > 0 ? `${videoInfo.width}×${videoInfo.height}` : '';
+  const fpsLabel = videoInfo && videoInfo.fps > 0 ? `${formatFps(videoInfo.fps)} fps` : '';
+  const codecLabel = videoInfo?.codec ? videoInfo.codec : '';
+  const durationLabel =
+    videoInfo && videoInfo.duration > 0 ? formatDuration(videoInfo.duration) : '';
+  const metaParts = [resolution, fpsLabel, codecLabel, durationLabel].filter(Boolean);
+  const metaShort = metaParts.join(' · ');
+  const metaTooltip =
+    [
+      resolution && `${t('videoMeta.resolution')} ${resolution}`,
+      fpsLabel && `${t('videoMeta.fps')} ${fpsLabel}`,
+      codecLabel && `${t('videoMeta.codec')} ${codecLabel}`,
+      durationLabel && `${t('videoMeta.duration')} ${durationLabel}`,
+      videoInfo && videoInfo.frame_count > 0
+        ? `${t('videoMeta.frames')} ${videoInfo.frame_count}`
+        : '',
+      videoInfo?.format ? `${t('videoMeta.format')} ${videoInfo.format}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ') || t('videoMeta.unavailable');
   const { zoom, panX, panY } = sharedZoom;
   const canDrag = zoom > 1 && !isPlaying;
 
@@ -300,8 +335,11 @@ export default function VideoWindow({
         {video ? (
           <>
             <CopyableFileName name={video.name} className="text-xs text-[#e0e0e0]" />
-            <span className="shrink-0 text-xs text-[#888888]" title={resolution}>
-              {resolution}
+            <span
+              className="shrink min-w-0 truncate text-xs text-[#888888]"
+              title={metaTooltip}
+            >
+              {metaShort || '—'}
             </span>
           </>
         ) : (
