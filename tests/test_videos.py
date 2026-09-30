@@ -48,6 +48,22 @@ def test_transcode_cache_dir_env_override(tmp_path, monkeypatch):
     assert videos.transcode_cache_dir() == str(tmp_path)
 
 
+def test_transcode_cache_distinct_for_same_name_different_dirs(tmp_path, monkeypatch):
+    """Same file name in different folders maps to different cache entries."""
+    from media_diff.utils import videos
+
+    monkeypatch.setenv("MEDIA_DIFF_TRANSCODE_CACHE_DIR", str(tmp_path / "cache"))
+    a = tmp_path / "a" / "clip.mp4"
+    b = tmp_path / "b" / "clip.mp4"
+    a.parent.mkdir()
+    b.parent.mkdir()
+    a.write_bytes(b"x")
+    b.write_bytes(b"y")
+
+    assert videos._transcode_key(str(a)) != videos._transcode_key(str(b))
+    assert videos._transcode_cache_path(str(a)) != videos._transcode_cache_path(str(b))
+
+
 def test_transcode_command_forces_mp4_muxer(tmp_path, monkeypatch):
     """The temp output ends in '.tmp', so ffmpeg needs an explicit -f mp4.
 
