@@ -38,6 +38,12 @@ interface VideoWindowProps {
 
 const PREFETCH_RANGE = 3;
 
+// Minimum gap between rendering two *stale* (superseded) frames while the user
+// holds A/D. Fresh target frames always render immediately; this only throttles
+// the steady stream of intermediate frames so a long hold keeps advancing at a
+// bounded lag instead of showing every (increasingly old) result or freezing.
+const STALE_RENDER_INTERVAL_MS = 150;
+
 /** Render fps without trailing zeros, e.g. 29.97 -> "29.97", 30 -> "30". */
 function formatFps(fps: number): string {
   return String(parseFloat(fps.toFixed(2)));
@@ -98,6 +104,9 @@ export default function VideoWindow({
   const pendingFrameRef = useRef<number | null>(null);
   const frameLoadingRef = useRef(false);
   const frameRetriesRef = useRef(0);
+  const inflightFrameRef = useRef<number | null>(null);
+  const effFrameRef = useRef(0);
+  const lastRenderRef = useRef(0);
   const prefetchAbortRef = useRef<AbortController | null>(null);
   const pumpFrameRef = useRef<() => void>(() => {});
 
@@ -180,6 +189,7 @@ export default function VideoWindow({
     videoInfo?.frame_count && videoInfo.frame_count > 0
       ? Math.min(currentFrame, videoInfo.frame_count)
       : currentFrame;
+  effFrameRef.current = effFrame;
   const loadedVideoPathRef = useRef<string | null>(null);
 
   // Assign the pump on every render so its async callbacks always see the
@@ -191,12 +201,26 @@ export default function VideoWindow({
     if (frame === null) return;
     pendingFrameRef.current = null;
     frameLoadingRef.current = true;
+    inflightFrameRef.current = frame;
     const controller = new AbortController();
     frameAbortRef.current = controller;
     void fetchVideoFrame(video.path, frame, { signal: controller.signal })
       .then(({ blobUrl }) => {
         frameLoadingRef.current = false;
+        inflightFrameRef.current = null;
         if (controller.signal.aborted) return;
+        // While holding A/D the user keeps moving on, so most results arrive
+        // "stale". Rendering every one makes the picture lag; rendering none
+        // freezes it. Render the current target immediately, and stale results
+        // only every STALE_RENDER_INTERVAL_MS so a long hold keeps updating at a
+        // coarse, lag-bounded rate instead of getting stuck on one frame.
+        const now = performance.now();
+        const isCurrent = frame === effFrameRef.current;
+        if (!isCurrent && now - lastRenderRef.current < STALE_RENDER_INTERVAL_MS) {
+          pumpFrameRef.current();
+          return;
+        }
+        lastRenderRef.current = now;
         frameRetriesRef.current = 0;
         setFrameUrl(blobUrl);
         setLoadError(false);
@@ -205,7 +229,12 @@ export default function VideoWindow({
       })
       .catch(() => {
         frameLoadingRef.current = false;
-        if (controller.signal.aborted) return;
+        inflightFrameRef.current = null;
+        if (controller.signal.aborted) {
+          // Cancelled because it was superseded; continue with the target.
+          pumpFrameRef.current();
+          return;
+        }
         if (frameRetriesRef.current < 3) {
           frameRetriesRef.current += 1;
           if (pendingFrameRef.current === null) pendingFrameRef.current = frame;
@@ -222,6 +251,7 @@ export default function VideoWindow({
     frameAbortRef.current?.abort();
     frameAbortRef.current = null;
     frameLoadingRef.current = false;
+    inflightFrameRef.current = null;
     pendingFrameRef.current = null;
     frameRetriesRef.current = 0;
     if (!video || isPlaying) {
@@ -243,6 +273,22 @@ export default function VideoWindow({
     if (isPlaying || !video) return;
     pendingFrameRef.current = effFrame;
     pumpFrameRef.current();
+  }, [video, effFrame, isPlaying]);
+
+  // Once stepping stops (short idle), cancel any in-flight extraction that is
+  // still on an older frame and fetch the final target immediately. Without
+  // this the user waits for the stale request to finish *and* another one,
+  // which is what made holding A/D feel stuck on intermediate frames.
+  useEffect(() => {
+    if (isPlaying || !video) return;
+    const timer = window.setTimeout(() => {
+      if (!frameLoadingRef.current) return;
+      if (inflightFrameRef.current === null) return;
+      if (inflightFrameRef.current === effFrame) return;
+      pendingFrameRef.current = effFrame;
+      frameAbortRef.current?.abort();
+    }, 80);
+    return () => window.clearTimeout(timer);
   }, [video, effFrame, isPlaying]);
 
   // Prefetch neighbor frames, but only after the current frame has settled and
@@ -495,9 +541,12 @@ export default function VideoWindow({
               player.onMainTimeUpdate(folderPath, e.currentTarget.currentTime);
             }}
             onCanPlay={(e) => {
-              // If the user pressed play while a transcode was still running,
-              // the src only appears once it finishes; start playback then.
-              if (isPlaying) {
+              // Only needed when the user already pressed play while the video
+              // was still loading (e.g. waiting for a transcode). If it is
+              // already playing, doing anything here would re-issue play() and
+              // (via the player) re-seek all windows mid-playback, causing
+              // stutter whenever the browser fires `canplay` after buffering.
+              if (isPlaying && e.currentTarget.paused) {
                 e.currentTarget.playbackRate = player.speed;
                 void e.currentTarget.play().catch(() => {});
               }

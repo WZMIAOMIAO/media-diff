@@ -10,6 +10,7 @@ from media_diff.utils.videos import (
     FFmpegError,
     extract_frame_with_histogram,
     get_playable_path,
+    get_playable_path_cached,
     get_video_info,
     is_browser_playable,
     is_native_video,
@@ -72,16 +73,16 @@ async def video_stream(path: str = Query(..., description="视频文件绝对路
         raise HTTPException(status_code=403, detail="无权限访问该路径")
 
     try:
-        # Probe first (cheap, cached) so native-playable files never wait behind
-        # a long transcode queue.
-        browser_playable = is_native_video(normalized) and await pool.run_ffmpeg(
-            "probe", lambda: is_browser_playable(normalized)
-        )
-        if browser_playable:
-            playable = normalized
-        else:
+        # Fast path: decide from cache without occupying a bounded ffmpeg
+        # executor. Playback issues many parallel Range requests; routing each
+        # through the (small) probe/transcode pools serialized them and caused
+        # periodic stalls. Only the first probe / an actual transcode needs a
+        # pool slot.
+        playable = get_playable_path_cached(normalized)
+        if playable is None:
+            purpose = "probe" if is_native_video(normalized) else "transcode"
             playable = await pool.run_ffmpeg(
-                "transcode", lambda: get_playable_path(normalized)
+                purpose, lambda: get_playable_path(normalized)
             )
     except FFmpegError as exc:
         _handle_ffmpeg_error(exc)

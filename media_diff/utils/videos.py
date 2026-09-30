@@ -390,6 +390,19 @@ def _codec_browser_safe(path: str, codec: str) -> bool:
     return codec.lower() in safe
 
 
+def browser_playable_cached(path: str) -> Optional[bool]:
+    """Cached browser-playability decision, or ``None`` when not yet probed.
+
+    Avoids running ffprobe/ffmpeg, so it can be called on the event loop.
+    """
+    from media_diff.utils.video_cache import video_info_cache
+
+    cached = video_info_cache.get(path)
+    if cached is None:
+        return None
+    return bool(cached["info"].get("browser_playable", True))
+
+
 def extract_frame(path: str, frame_no: int, fps: Optional[float] = None) -> bytes:
     """Extract a single frame as JPEG bytes via ffmpeg.
 
@@ -827,3 +840,22 @@ def get_playable_path(path: str) -> str:
     if shutil.which(FFMPEG_BIN) is None:
         raise FFmpegError("视频需要转码，但 ffmpeg 未安装")
     return transcode_to_mp4(path)
+
+
+def get_playable_path_cached(path: str) -> Optional[str]:
+    """Like :func:`get_playable_path` but using only cached state (no ffmpeg).
+
+    Returns ``None`` when a probe or transcode would be required. The streaming
+    endpoint uses this so that serving a range never occupies one of the bounded
+    ffmpeg executors in the common case (already probed / already transcoded),
+    which would otherwise serialize playback's parallel range requests.
+    """
+    if is_native_video(path):
+        cached = browser_playable_cached(path)
+        if cached is True:
+            return path
+        if cached is None:
+            return None  # needs a probe before we can decide
+    if _transcode_cache_ready(path):
+        return _transcode_cache_path(path)
+    return None

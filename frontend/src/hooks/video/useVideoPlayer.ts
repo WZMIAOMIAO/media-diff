@@ -195,20 +195,24 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
 
   const seekToFrame = useCallback(
     (frame: number) => {
+      // Only move the frame counter here. The paused view is an ffmpeg-extracted
+      // image; the <video> elements are positioned by the debounced sync effect
+      // below. Seeking every <video> per progress-bar `onChange` (which fires
+      // continuously while dragging) was the main cause of drag jank.
       const clamped = Math.max(1, Math.min(frame, baseFrameCount || frame));
       setCurrentFrame(clamped);
-      seekAllVideos(clamped);
       setIsPlaying(false);
       isPlayingRef.current = false;
       for (const el of videoRefs.current.values()) el.pause();
     },
-    [baseFrameCount, setCurrentFrame, seekAllVideos],
+    [baseFrameCount, setCurrentFrame],
   );
 
   const stepFrame = useCallback(
     (delta: number) => {
       // Only advance the frame counter here. Seeking every <video> on each step
-      // is expensive under rapid A/D; the position is synced on play instead.
+      // is expensive under rapid A/D; the position is synced separately below
+      // (debounced) so pressing play starts without a seek stall.
       const max = baseFrameCount > 0 ? baseFrameCount : Number.MAX_SAFE_INTEGER;
       const next = Math.max(1, Math.min(currentFrameRef.current + delta, max));
       setCurrentFrame(next);
@@ -218,6 +222,19 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
     },
     [baseFrameCount, setCurrentFrame],
   );
+
+  // Position the paused <video> elements at the current frame once stepping /
+  // scrubbing settles. Doing it here (debounced, off the interaction path) keeps
+  // dragging smooth while ensuring `play()` starts immediately instead of
+  // stalling on a seek. During playback this effect does nothing.
+  useEffect(() => {
+    if (isPlaying) return;
+    const frame = currentFrame;
+    const timer = window.setTimeout(() => {
+      if (!isPlayingRef.current) seekAllVideos(frame);
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [currentFrame, isPlaying, seekAllVideos]);
 
   const onMainTimeUpdate = useCallback(
     (folderPath: string, time: number) => {

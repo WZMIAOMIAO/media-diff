@@ -127,6 +127,30 @@ def test_browser_playable_probe_failure_is_optimistic(monkeypatch):
     assert videos.is_browser_playable("a.mp4") is True
 
 
+def test_get_playable_path_cached_uses_only_cache(tmp_path):
+    from media_diff.utils import videos
+    from media_diff.utils.video_cache import video_info_cache
+
+    src = tmp_path / "clip.mp4"
+    src.write_bytes(b"x")
+    path = str(src)
+
+    # Nothing probed yet -> cannot decide without running ffmpeg.
+    assert videos.get_playable_path_cached(path) is None
+
+    # A cached "playable" decision serves the original file directly (no ffmpeg).
+    video_info_cache.put(
+        path, {"codec": "h264", "browser_playable": True}, src.stat().st_mtime
+    )
+    assert videos.get_playable_path_cached(path) == path
+
+    # A cached "not playable" decision with no transcode yet still needs work.
+    video_info_cache.put(
+        path, {"codec": "mpeg4", "browser_playable": False}, src.stat().st_mtime
+    )
+    assert videos.get_playable_path_cached(path) is None
+
+
 def test_get_playable_path_transcodes_unsupported_codec(tmp_path, monkeypatch):
     from media_diff.utils import videos
 
