@@ -19,6 +19,7 @@ import random
 import threading
 
 from media_diff.utils.filesystem import list_images, list_videos
+from media_diff.utils.security import AccessDeniedError, ensure_within_access_root
 
 RESULT_FILENAME = "blind_review_results.json"
 ALIASES = "ABCD"
@@ -49,6 +50,10 @@ def resolve_output_path(raw: str) -> str:
     """
     if not raw or not raw.strip():
         raise BlindEvalError("输出路径不能为空")
+    try:
+        ensure_within_access_root(raw)
+    except AccessDeniedError as exc:
+        raise BlindEvalError("输出路径超出允许访问的范围", status_code=403) from exc
     normalized = os.path.normpath(raw.strip())
     if normalized.lower().endswith(".json"):
         parent = os.path.dirname(normalized) or "."
@@ -61,6 +66,10 @@ def resolve_output_path(raw: str) -> str:
 
 
 def _validate_folder(path: str) -> str:
+    try:
+        ensure_within_access_root(path)
+    except AccessDeniedError as exc:
+        raise BlindEvalError("对比目录超出允许访问的范围", status_code=403) from exc
     normalized = os.path.normpath(path)
     if not os.path.isdir(normalized):
         raise BlindEvalError(f"对比目录不存在: {path}", status_code=404)

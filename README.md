@@ -57,6 +57,7 @@ media-diff
 | `--host 0.0.0.0` | 监听所有网卡，供局域网访问 |
 | `--port 8080` | 指定端口（默认 8000） |
 | `--no-browser` | 启动后不自动打开浏览器 |
+| `--root PATH` | 限制只能访问 `PATH` 及其子目录，打开目录时默认指向该路径 |
 | `--reload` | 代码变更自动重载（开发用） |
 | `--extract-concurrency N` | ffmpeg 抽帧并发上限（默认 4） |
 | `--transcode-concurrency N` | 视频转码并发上限（默认 1） |
@@ -65,6 +66,23 @@ media-diff
 | `--version` | 查看版本 |
 
 > **并发参数按用途分开**，也可用环境变量设置：`MEDIA_DIFF_EXTRACT_CONCURRENCY`、`MEDIA_DIFF_TRANSCODE_CONCURRENCY`、`MEDIA_DIFF_THUMBNAIL_CONCURRENCY`、`MEDIA_DIFF_PROBE_CONCURRENCY`（CLI 参数优先级更高）。多用户或高核数服务器可适当调大（如 32 核可设抽帧 16、转码 4；192 核可设更高）。所有希望使用同一批视频的用户会共享缓存与转码结果。
+
+### 限制访问目录（沙箱）
+
+默认不限制访问范围，可读取本机任意路径。若部署在共享环境或只想暴露某个数据集，用 `--root` 指定访问根目录：
+
+```bash
+media-diff --root /data/dataset
+```
+
+- 打开目录（选择文件夹）时**默认指向该根目录**；
+- 只允许浏览/读取该目录**及其子目录**，访问根目录以外的路径一律返回 403（符号链接指向外部同样被拦截）；
+- 也可用环境变量 `MEDIA_DIFF_ROOT` 设置；`--root` 传入的路径不存在会直接报错退出。
+
+```bash
+# 等价写法
+MEDIA_DIFF_ROOT=/data/dataset media-diff
+```
 
 也可用模块方式启动：`python -m media_diff`。
 

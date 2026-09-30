@@ -162,6 +162,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Do not open the browser automatically",
     )
     parser.add_argument(
+        "--root",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Restrict the server to PATH and its subdirectories; the folder "
+            "browser defaults to it (env MEDIA_DIFF_ROOT)"
+        ),
+    )
+    parser.add_argument(
         "--reload",
         action="store_true",
         help="Auto-reload on code changes (development)",
@@ -407,6 +416,23 @@ def _apply_concurrency_env(args: argparse.Namespace) -> None:
             os.environ[env_name] = str(max(1, value))
 
 
+def _apply_root_env(args: argparse.Namespace) -> bool:
+    """Forward ``--root`` to ``MEDIA_DIFF_ROOT`` (validated before import).
+
+    Returns ``False`` (after printing a message) when the given path is not an
+    existing directory, so the caller can abort.
+    """
+    root = getattr(args, "root", None)
+    if root is None:
+        return True
+    expanded = os.path.abspath(os.path.expanduser(root))
+    if not os.path.isdir(expanded):
+        print(f"Error: --root is not an existing directory: {root}")
+        return False
+    os.environ["MEDIA_DIFF_ROOT"] = expanded
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -420,6 +446,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_clean(args)
 
     _apply_concurrency_env(args)
+    if not _apply_root_env(args):
+        return 1
     _start_server(args)
     return 0
 

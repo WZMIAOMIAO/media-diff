@@ -3,9 +3,13 @@ import string
 import sys
 
 from media_diff.config import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
+from media_diff.utils.security import get_access_root
 
 
 def get_roots() -> list[str]:
+    root = get_access_root()
+    if root is not None:
+        return [root]
     if sys.platform.startswith("win"):
         roots: list[str] = []
         for letter in string.ascii_uppercase:
@@ -19,12 +23,18 @@ def get_roots() -> list[str]:
 def get_default_browse_path() -> str:
     """Default directory shown when opening the folder browser.
 
+    When an access root is configured it is always the default, so the browser
+    starts inside the only directory the server may expose.
+
     - Linux / macOS: the current user's home directory (``~``).
     - Windows: the current user's Desktop (falls back to home if missing).
 
     The Desktop folder name may be localized on some Windows installs, so a
     few common names are tried before falling back to the home directory.
     """
+    root = get_access_root()
+    if root is not None:
+        return root
     home = os.path.expanduser("~")
     if sys.platform.startswith("win"):
         for name in ("Desktop", "桌面"):

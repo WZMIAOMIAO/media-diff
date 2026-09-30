@@ -9,12 +9,14 @@ from PIL import Image
 from media_diff.config import IMAGE_EXTENSIONS, THUMBNAIL_DEFAULT_SIZE
 from media_diff.utils.cache import thumbnail_cache
 from media_diff.utils.images import generate_thumbnail
+from media_diff.utils.security import ensure_within_access_root
 
 router = APIRouter(prefix="/api/images", tags=["images"])
 
 
 def _validate_image_path(path: str) -> str:
     """Validate path exists, is a file, and has a supported image extension."""
+    ensure_within_access_root(path)
     normalized = os.path.normpath(path)
     if not os.path.exists(normalized):
         raise HTTPException(status_code=404, detail="路径不存在")

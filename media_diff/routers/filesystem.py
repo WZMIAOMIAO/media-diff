@@ -11,6 +11,7 @@ from media_diff.utils.filesystem import (
     list_subdirs,
     list_videos,
 )
+from media_diff.utils.security import ensure_within_access_root
 
 router = APIRouter(prefix="/api/filesystem", tags=["filesystem"])
 
@@ -29,6 +30,9 @@ class VideosRequest(BaseModel):
 
 
 def _resolve_path(path: str) -> str:
+    # Enforce the access root before touching the filesystem so an outside path
+    # is always rejected (and its existence is never leaked).
+    ensure_within_access_root(path)
     normalized = os.path.normpath(path)
     if not os.path.exists(normalized):
         raise HTTPException(status_code=404, detail="路径不存在")

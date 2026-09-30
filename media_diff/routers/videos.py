@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, Response
 
 from media_diff.config import THUMBNAIL_DEFAULT_SIZE, VIDEO_EXTENSIONS
 from media_diff.utils import pool
+from media_diff.utils.security import ensure_within_access_root
 from media_diff.utils.videos import (
     FFmpegError,
     extract_frame_with_histogram,
@@ -23,6 +24,7 @@ _NATIVE_EXTS = {".mp4", ".webm"}
 
 
 def _validate_video_path(path: str) -> str:
+    ensure_within_access_root(path)
     normalized = os.path.normpath(path)
     if not os.path.exists(normalized):
         raise HTTPException(status_code=404, detail="路径不存在")

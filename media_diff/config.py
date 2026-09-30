@@ -1,6 +1,11 @@
 import os
 
 
+# 访问根目录（沙箱）：设置后仅允许浏览/读取该目录及其子目录，空值表示不限制。
+# 由 CLI --root 或环境变量 MEDIA_DIFF_ROOT 设置。
+ACCESS_ROOT = os.environ.get("MEDIA_DIFF_ROOT") or None
+
+
 def _env_int(name: str, default: int) -> int:
     """Read a positive integer from the environment (fallback to default)."""
     raw = os.environ.get(name)

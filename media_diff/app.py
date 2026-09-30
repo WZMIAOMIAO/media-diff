@@ -23,6 +23,11 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 def create_app() -> FastAPI:
     """Build and configure the FastAPI application."""
+    # Fail fast when a sandbox root is configured but invalid.
+    from media_diff.utils.security import validate_access_root
+
+    validate_access_root()
+
     app = FastAPI(
         title="Media Diff",
         version=__version__,
@@ -50,6 +55,8 @@ def create_app() -> FastAPI:
             "status": "ok",
             "service": "media-diff",
             "version": __version__,
+            # Configured access root (sandbox); None means unrestricted.
+            "root": config.ACCESS_ROOT or None,
             # Exposed so deployments can confirm the configured ffmpeg concurrency.
             "concurrency": {
                 "extract": config.EXTRACT_CONCURRENCY,

@@ -103,3 +103,22 @@ def test_apply_concurrency_env_ignores_none(monkeypatch):
         )
     )
     assert cli.os.environ["MEDIA_DIFF_EXTRACT_CONCURRENCY"] == "7"
+
+
+def test_apply_root_env_sets_env(tmp_path, monkeypatch):
+    monkeypatch.delenv("MEDIA_DIFF_ROOT", raising=False)
+    root = tmp_path / "data"
+    root.mkdir()
+    assert cli._apply_root_env(argparse.Namespace(root=str(root))) is True
+    assert cli.os.environ["MEDIA_DIFF_ROOT"] == str(root)
+
+
+def test_apply_root_env_rejects_missing(tmp_path, capsys):
+    assert cli._apply_root_env(argparse.Namespace(root=str(tmp_path / "nope"))) is False
+    assert "not an existing directory" in capsys.readouterr().out
+
+
+def test_apply_root_env_noop_when_absent(monkeypatch):
+    monkeypatch.delenv("MEDIA_DIFF_ROOT", raising=False)
+    assert cli._apply_root_env(argparse.Namespace(root=None)) is True
+    assert "MEDIA_DIFF_ROOT" not in cli.os.environ
