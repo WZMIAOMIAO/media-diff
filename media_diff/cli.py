@@ -169,6 +169,46 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version", action="version", version=f"media-diff {__version__}"
     )
+    parser.add_argument(
+        "--extract-concurrency",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Max concurrent ffmpeg frame extractions (env "
+            "MEDIA_DIFF_EXTRACT_CONCURRENCY, default 4)"
+        ),
+    )
+    parser.add_argument(
+        "--transcode-concurrency",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Max concurrent video transcodes (env "
+            "MEDIA_DIFF_TRANSCODE_CONCURRENCY, default 1)"
+        ),
+    )
+    parser.add_argument(
+        "--thumbnail-concurrency",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Max concurrent video thumbnail extractions (env "
+            "MEDIA_DIFF_THUMBNAIL_CONCURRENCY, default 2)"
+        ),
+    )
+    parser.add_argument(
+        "--probe-concurrency",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Max concurrent video info probes (env "
+            "MEDIA_DIFF_PROBE_CONCURRENCY, default 2)"
+        ),
+    )
 
     subparsers = parser.add_subparsers(dest="command")
     status = subparsers.add_parser(
@@ -347,6 +387,26 @@ def _start_server(args: argparse.Namespace) -> None:
         _restore_tty(saved_tty)
 
 
+_CONCURRENCY_ENV: dict[str, str] = {
+    "extract_concurrency": "MEDIA_DIFF_EXTRACT_CONCURRENCY",
+    "transcode_concurrency": "MEDIA_DIFF_TRANSCODE_CONCURRENCY",
+    "thumbnail_concurrency": "MEDIA_DIFF_THUMBNAIL_CONCURRENCY",
+    "probe_concurrency": "MEDIA_DIFF_PROBE_CONCURRENCY",
+}
+
+
+def _apply_concurrency_env(args: argparse.Namespace) -> None:
+    """Forward CLI concurrency flags to the matching env vars.
+
+    The flags are applied before the app (and its ffmpeg executors) is imported,
+    so they take effect for this server run.
+    """
+    for attr, env_name in _CONCURRENCY_ENV.items():
+        value = getattr(args, attr, None)
+        if value is not None:
+            os.environ[env_name] = str(max(1, value))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -359,6 +419,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "clean":
         return _cmd_clean(args)
 
+    _apply_concurrency_env(args)
     _start_server(args)
     return 0
 

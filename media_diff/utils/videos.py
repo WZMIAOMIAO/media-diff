@@ -13,8 +13,8 @@ from typing import Optional
 from PIL import Image
 
 from media_diff.config import (
+    EXTRACT_CONCURRENCY,
     NATIVE_VIDEO_EXTENSIONS,
-    VIDEO_EXTRACT_CONCURRENCY,
     VIDEO_TRANSCODE_CACHE_DIR,
 )
 from media_diff.utils.images import calculate_histogram
@@ -39,19 +39,32 @@ class FFmpegError(Exception):
 
 
 # Serialize transcoding so concurrent requests for the same (or different)
-# non-native videos never write to the same temp file at once.
-_transcode_lock = threading.Lock()
+# Per-source transcode locks: different videos may transcode in parallel (bounded
+# by the transcode executor), while concurrent requests for the same video are
+# serialized so they never write the same temp file at once.
+_transcode_locks: dict[str, threading.Lock] = {}
+_transcode_locks_guard = threading.Lock()
 
 # Per-source transcode state, keyed by normcase(abspath). Lets the frontend
-# poll progress while the (synchronous) transcode runs, and lets us coalesce
-# concurrent requests for the same video.
+# poll progress while the transcode runs, and lets us coalesce concurrent requests
+# for the same video.
 _transcode_states: dict[str, dict] = {}
-_transcode_threads: dict[str, threading.Thread] = {}
+_transcode_futures: dict[str, "concurrent.futures.Future"] = {}
 _transcode_states_lock = threading.Lock()
 
 
 def _transcode_key(path: str) -> str:
     return os.path.normcase(os.path.abspath(path))
+
+
+def _transcode_lock_for(path: str) -> threading.Lock:
+    key = _transcode_key(path)
+    with _transcode_locks_guard:
+        lock = _transcode_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _transcode_locks[key] = lock
+        return lock
 
 
 def _set_transcode_state(path: str, **fields) -> None:
@@ -423,7 +436,7 @@ def extract_frame(path: str, frame_no: int, fps: Optional[float] = None) -> byte
 # Bound concurrent ffmpeg frame extractions and de-duplicate identical
 # (path, frame) requests. Without this, rapid stepping spawns a process per
 # request and saturates the CPU, which then stalls the frame the user is on.
-_extract_semaphore = threading.BoundedSemaphore(VIDEO_EXTRACT_CONCURRENCY)
+_extract_semaphore = threading.BoundedSemaphore(EXTRACT_CONCURRENCY)
 _extract_inflight: dict[tuple[str, int], threading.Event] = {}
 _extract_inflight_lock = threading.Lock()
 
@@ -434,7 +447,7 @@ def extract_frame_with_histogram(path: str, frame_no: int) -> tuple[bytes, str]:
     Mirrors the image thumbnail X-Histogram mechanism so the frontend can
     reuse its histogram cache/rendering logic. Concurrent requests for the same
     frame share one ffmpeg run, and the number of concurrent ffmpeg processes
-    is capped by ``VIDEO_EXTRACT_CONCURRENCY``.
+    is capped by ``EXTRACT_CONCURRENCY`` (the ``extract`` executor).
     """
     from media_diff.utils.video_cache import video_frame_cache
 
@@ -609,31 +622,35 @@ def transcode_status(path: str) -> dict:
 def start_transcode_async(path: str) -> dict:
     """Start (or join) a background transcode for ``path``.
 
-    Idempotent: concurrent calls for the same video share one worker. Returns
-    the current :func:`transcode_status`.
+    Idempotent: concurrent calls for the same video share one job. The job runs on
+    the bounded ``transcode`` executor, so the number of concurrent transcodes is
+    capped by ``MEDIA_DIFF_TRANSCODE_CONCURRENCY``. Returns the current
+    :func:`transcode_status`.
     """
     if _transcode_cache_ready(path):
         _set_transcode_state(path, state="done", progress=1.0, error=None)
         return {"state": "done", "progress": 1.0}
 
+    from media_diff.utils import pool
+
     key = _transcode_key(path)
     with _transcode_states_lock:
-        running = _transcode_threads.get(key)
-        if running is not None and running.is_alive():
+        future = _transcode_futures.get(key)
+        if future is not None and not future.done():
             return transcode_status(path)
         _transcode_states[key] = {"state": "pending", "progress": 0.0, "error": None}
 
-    def worker() -> None:
-        try:
-            transcode_to_mp4(path)
-        except Exception as exc:  # surfaced to the client via transcode_status
-            _set_transcode_state(path, state="error", error=str(exc))
-
-    thread = threading.Thread(target=worker, name="transcode", daemon=True)
+    future = pool.get_executor("transcode").submit(_run_transcode_job, path)
     with _transcode_states_lock:
-        _transcode_threads[key] = thread
-    thread.start()
+        _transcode_futures[key] = future
     return {"state": "pending", "progress": 0.0}
+
+
+def _run_transcode_job(path: str) -> None:
+    try:
+        transcode_to_mp4(path)
+    except Exception as exc:  # surfaced to the client via transcode_status
+        _set_transcode_state(path, state="error", error=str(exc))
 
 
 def transcode_to_mp4(path: str) -> str:
@@ -652,7 +669,7 @@ def transcode_to_mp4(path: str) -> str:
     out_path = _transcode_cache_path(path)
     meta_path = out_path + ".meta"
 
-    with _transcode_lock:
+    with _transcode_lock_for(path):
         if _transcode_cache_ready(path):
             _set_transcode_state(path, state="done", progress=1.0, error=None)
             return out_path

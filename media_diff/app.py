@@ -44,7 +44,20 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health", tags=["health"])
     def health() -> dict:
-        return {"status": "ok", "service": "media-diff", "version": __version__}
+        from media_diff import config
+
+        return {
+            "status": "ok",
+            "service": "media-diff",
+            "version": __version__,
+            # Exposed so deployments can confirm the configured ffmpeg concurrency.
+            "concurrency": {
+                "extract": config.EXTRACT_CONCURRENCY,
+                "transcode": config.TRANSCODE_CONCURRENCY,
+                "thumbnail": config.THUMBNAIL_CONCURRENCY,
+                "probe": config.PROBE_CONCURRENCY,
+            },
+        }
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str) -> FileResponse:

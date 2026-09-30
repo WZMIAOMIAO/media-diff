@@ -1,3 +1,18 @@
+import os
+
+
+def _env_int(name: str, default: int) -> int:
+    """Read a positive integer from the environment (fallback to default)."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 IMAGE_EXTENSIONS: set[str] = {
     ".jpg",
     ".jpeg",
@@ -32,8 +47,16 @@ NATIVE_VIDEO_EXTENSIONS: set[str] = {".mp4", ".webm"}
 VIDEO_THUMBNAIL_CACHE_MAX = 500
 VIDEO_FRAME_CACHE_MAX = 1000
 VIDEO_INFO_CACHE_MAX = 200
-# Upper bound on concurrent ffmpeg frame extractions. Rapid A/D stepping can
-# otherwise spawn hundreds of competing ffmpeg processes and starve the CPU.
-VIDEO_EXTRACT_CONCURRENCY = 4
+
+# ffmpeg 并发上限，按用途分开配置（环境变量可覆盖；CLI 参数会写入这些变量）。
+# 抽帧：当前帧/预取的 ffmpeg 进程数上限。
+EXTRACT_CONCURRENCY = _env_int("MEDIA_DIFF_EXTRACT_CONCURRENCY", 4)
+# 转码：同时进行的转码数（不同视频可并行，同一视频内部串行）。
+TRANSCODE_CONCURRENCY = _env_int("MEDIA_DIFF_TRANSCODE_CONCURRENCY", 1)
+# 视频封面缩略图。
+THUMBNAIL_CONCURRENCY = _env_int("MEDIA_DIFF_THUMBNAIL_CONCURRENCY", 2)
+# 元信息探测（ffprobe / ffmpeg -i）。
+PROBE_CONCURRENCY = _env_int("MEDIA_DIFF_PROBE_CONCURRENCY", 2)
+
 VIDEO_TRANSCODE_CACHE_DIR = "_video_transcode_cache"
 

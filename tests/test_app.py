@@ -6,7 +6,14 @@ from media_diff.app import STATIC_DIR
 def test_health(client):
     res = client.get("/api/health")
     assert res.status_code == 200
-    assert res.json()["status"] == "ok"
+    body = res.json()
+    assert body["status"] == "ok"
+    assert set(body["concurrency"]) == {
+        "extract",
+        "transcode",
+        "thumbnail",
+        "probe",
+    }
 
 
 def test_unknown_api_returns_404(client):

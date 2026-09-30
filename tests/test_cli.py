@@ -73,3 +73,33 @@ def test_cmd_clean_empty(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("MEDIA_DIFF_TRANSCODE_CACHE_DIR", str(tmp_path))
     assert cli._cmd_clean(argparse.Namespace(dry_run=False)) == 0
     assert "already empty" in capsys.readouterr().out
+
+
+def test_apply_concurrency_env(monkeypatch):
+    for env in cli._CONCURRENCY_ENV.values():
+        monkeypatch.delenv(env, raising=False)
+    args = argparse.Namespace(
+        extract_concurrency=8,
+        transcode_concurrency=2,
+        thumbnail_concurrency=3,
+        probe_concurrency=5,
+    )
+    cli._apply_concurrency_env(args)
+    assert cli.os.environ["MEDIA_DIFF_EXTRACT_CONCURRENCY"] == "8"
+    assert cli.os.environ["MEDIA_DIFF_TRANSCODE_CONCURRENCY"] == "2"
+    assert cli.os.environ["MEDIA_DIFF_THUMBNAIL_CONCURRENCY"] == "3"
+    assert cli.os.environ["MEDIA_DIFF_PROBE_CONCURRENCY"] == "5"
+
+
+def test_apply_concurrency_env_ignores_none(monkeypatch):
+    for env in cli._CONCURRENCY_ENV.values():
+        monkeypatch.setenv(env, "7")
+    cli._apply_concurrency_env(
+        argparse.Namespace(
+            extract_concurrency=None,
+            transcode_concurrency=None,
+            thumbnail_concurrency=None,
+            probe_concurrency=None,
+        )
+    )
+    assert cli.os.environ["MEDIA_DIFF_EXTRACT_CONCURRENCY"] == "7"

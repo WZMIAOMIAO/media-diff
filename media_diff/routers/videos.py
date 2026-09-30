@@ -4,12 +4,14 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 
 from media_diff.config import THUMBNAIL_DEFAULT_SIZE, VIDEO_EXTENSIONS
+from media_diff.utils import pool
 from media_diff.utils.videos import (
     FFmpegError,
     extract_frame_with_histogram,
     get_playable_path,
     get_video_info,
     is_browser_playable,
+    is_native_video,
     make_video_thumbnail,
     start_transcode_async,
     transcode_status,
@@ -41,26 +43,26 @@ def _handle_ffmpeg_error(exc: FFmpegError) -> None:
 
 
 @router.get("/info")
-def video_info(path: str = Query(..., description="视频文件绝对路径")):
+async def video_info(path: str = Query(..., description="视频文件绝对路径")):
     try:
         normalized = _validate_video_path(path)
     except PermissionError:
         raise HTTPException(status_code=403, detail="无权限访问该路径")
 
     try:
-        info = get_video_info(normalized)
+        return await pool.run_ffmpeg("probe", lambda: get_video_info(normalized))
     except FFmpegError as exc:
         _handle_ffmpeg_error(exc)
         return  # unreachable
-    return info
 
 
 @router.get("/stream")
-def video_stream(path: str = Query(..., description="视频文件绝对路径")):
+async def video_stream(path: str = Query(..., description="视频文件绝对路径")):
     """Return a playable video file for <video>.
 
-    Native formats (mp4/webm) are served directly with Range support via
-    FileResponse. Non-native formats are transcoded to a cached mp4 first.
+    Native formats (mp4/webm) with a browser-supported codec are served directly
+    with Range support via FileResponse. Everything else is transcoded to a cached
+    mp4 first.
     """
     try:
         normalized = _validate_video_path(path)
@@ -68,7 +70,17 @@ def video_stream(path: str = Query(..., description="视频文件绝对路径"))
         raise HTTPException(status_code=403, detail="无权限访问该路径")
 
     try:
-        playable = get_playable_path(normalized)
+        # Probe first (cheap, cached) so native-playable files never wait behind
+        # a long transcode queue.
+        browser_playable = is_native_video(normalized) and await pool.run_ffmpeg(
+            "probe", lambda: is_browser_playable(normalized)
+        )
+        if browser_playable:
+            playable = normalized
+        else:
+            playable = await pool.run_ffmpeg(
+                "transcode", lambda: get_playable_path(normalized)
+            )
     except FFmpegError as exc:
         _handle_ffmpeg_error(exc)
         return  # unreachable
@@ -87,7 +99,7 @@ def video_stream(path: str = Query(..., description="视频文件绝对路径"))
 
 
 @router.post("/transcode")
-def start_transcode(path: str = Query(..., description="视频文件绝对路径")):
+async def start_transcode(path: str = Query(..., description="视频文件绝对路径")):
     """Kick off a background transcode for a browser-unsupported video.
 
     Returns immediately; poll ``GET /api/videos/transcode-status`` for progress.
@@ -97,7 +109,7 @@ def start_transcode(path: str = Query(..., description="视频文件绝对路径
     except PermissionError:
         raise HTTPException(status_code=403, detail="无权限访问该路径")
 
-    if is_browser_playable(normalized):
+    if await pool.run_ffmpeg("probe", lambda: is_browser_playable(normalized)):
         return {"state": "not_needed", "progress": 1.0}
     return start_transcode_async(normalized)
 
@@ -114,7 +126,7 @@ def get_transcode_status(path: str = Query(..., description="视频文件绝对�
 
 
 @router.get("/frame")
-def video_frame(
+async def video_frame(
     path: str = Query(..., description="视频文件绝对路径"),
     frame: int = Query(..., ge=1, description="帧号（1-based）"),
 ):
@@ -128,7 +140,9 @@ def video_frame(
         raise HTTPException(status_code=403, detail="无权限访问该路径")
 
     try:
-        jpeg_bytes, histogram_b64 = extract_frame_with_histogram(normalized, frame)
+        jpeg_bytes, histogram_b64 = await pool.run_ffmpeg(
+            "extract", lambda: extract_frame_with_histogram(normalized, frame)
+        )
     except FFmpegError as exc:
         _handle_ffmpeg_error(exc)
         return  # unreachable
@@ -140,7 +154,7 @@ def video_frame(
 
 
 @router.get("/thumbnail")
-def video_thumbnail(
+async def video_thumbnail(
     path: str = Query(..., description="视频文件绝对路径"),
     size: int = Query(
         THUMBNAIL_DEFAULT_SIZE, ge=1, le=4096, description="缩略图最大边像素数"
@@ -152,7 +166,9 @@ def video_thumbnail(
         raise HTTPException(status_code=403, detail="无权限访问该路径")
 
     try:
-        jpeg_bytes, histogram_b64 = make_video_thumbnail(normalized, size)
+        jpeg_bytes, histogram_b64 = await pool.run_ffmpeg(
+            "thumbnail", lambda: make_video_thumbnail(normalized, size)
+        )
     except FFmpegError as exc:
         _handle_ffmpeg_error(exc)
         return  # unreachable
@@ -164,7 +180,7 @@ def video_thumbnail(
 
 
 @router.get("/histogram")
-def video_frame_histogram(
+async def video_frame_histogram(
     path: str = Query(..., description="视频文件绝对路径"),
     frame: int = Query(..., ge=1, description="帧号（1-based）"),
 ):
@@ -178,7 +194,9 @@ def video_frame_histogram(
         raise HTTPException(status_code=403, detail="无权限访问该路径")
 
     try:
-        _, histogram_b64 = extract_frame_with_histogram(normalized, frame)
+        _, histogram_b64 = await pool.run_ffmpeg(
+            "extract", lambda: extract_frame_with_histogram(normalized, frame)
+        )
     except FFmpegError as exc:
         _handle_ffmpeg_error(exc)
         return  # unreachable

@@ -52,7 +52,13 @@ media-diff
 | `--port 8080` | 指定端口（默认 8000） |
 | `--no-browser` | 启动后不自动打开浏览器 |
 | `--reload` | 代码变更自动重载（开发用） |
+| `--extract-concurrency N` | ffmpeg 抽帧并发上限（默认 4） |
+| `--transcode-concurrency N` | 视频转码并发上限（默认 1） |
+| `--thumbnail-concurrency N` | 视频封面抽帧并发上限（默认 2） |
+| `--probe-concurrency N` | 视频元信息探测并发上限（默认 2） |
 | `--version` | 查看版本 |
+
+> **并发参数按用途分开**，也可用环境变量设置：`MEDIA_DIFF_EXTRACT_CONCURRENCY`、`MEDIA_DIFF_TRANSCODE_CONCURRENCY`、`MEDIA_DIFF_THUMBNAIL_CONCURRENCY`、`MEDIA_DIFF_PROBE_CONCURRENCY`（CLI 参数优先级更高）。多用户或高核数服务器可适当调大（如 32 核可设抽帧 16、转码 4；192 核可设更高）。所有希望使用同一批视频的用户会共享缓存与转码结果。
 
 也可用模块方式启动：`python -m media_diff`。
 
