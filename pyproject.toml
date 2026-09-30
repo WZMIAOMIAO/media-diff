@@ -60,6 +60,7 @@ include = [
     "frontend/.oxlintrc.json",
     "tests",
     "doc",
+    "assets",
     "README.md",
     "LICENSE",
     "CONTRIBUTING.md",
