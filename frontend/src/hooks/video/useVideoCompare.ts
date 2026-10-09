@@ -28,6 +28,10 @@ export interface UseVideoCompareReturn {
   setSearchQuery: (q: string) => void;
   intersectionMode: boolean;
   setIntersectionMode: (b: boolean) => void;
+  recursiveMode: boolean;
+  setRecursiveMode: (b: boolean) => void;
+  /** True when a recursive listing hit the backend entry cap. */
+  truncated: boolean;
 
   blind: BlindEvalApi | null;
   enterBlind: (result: BlindSetupResult) => void;
@@ -40,6 +44,27 @@ interface BlindRuntime {
   displayOrders: Record<string, number[]>;
   outputPath: string;
   winLists: Record<string, string[]>;
+  /** Whether the common file keys are folder-relative paths (recursive). */
+  recursive: boolean;
+}
+
+const RECURSIVE_STORAGE_KEY = 'media-diff:video:recursive';
+
+function loadRecursiveMode(): boolean {
+  try {
+    return localStorage.getItem(RECURSIVE_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Pairing key: file name in flat mode, folder-relative path in recursive mode. */
+function pairKeyOf(video: { name: string; rel?: string }, recursive: boolean): string {
+  return recursive ? video.rel ?? video.name : video.name;
+}
+
+function missingEntry(key: string): VideoEntry {
+  return { name: '', path: '', rel: key, missing: true };
 }
 
 function winListsFromData(
@@ -91,6 +116,9 @@ export function useVideoCompare(): UseVideoCompareReturn {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [intersectionMode, setIntersectionModeState] = useState(false);
+  const [recursiveMode, setRecursiveModeState] = useState(loadRecursiveMode);
+  const recursiveRef = useRef(recursiveMode);
+  const [truncated, setTruncated] = useState(false);
 
   const blindRef = useRef<BlindRuntime | null>(null);
   const blindIndexRef = useRef(0);
@@ -109,13 +137,65 @@ export function useVideoCompare(): UseVideoCompareReturn {
     if (blind) {
       for (const f of foldersRef.current) {
         const vids = videosRef.current.get(f.path) ?? [];
-        const byName = new Map(vids.map((v) => [v.name, v] as const));
+        const byKey = new Map(
+          vids.map((v) => [pairKeyOf(v, blind.recursive), v] as const),
+        );
         let list = blind.order
-          .map((n) => byName.get(n))
+          .map((k) => byKey.get(k))
           .filter((x): x is VideoEntry => x !== undefined);
-        if (q) list = list.filter((v) => v.name.toLowerCase().includes(q));
+        if (q) {
+          list = list.filter((v) =>
+            pairKeyOf(v, blind.recursive).toLowerCase().includes(q),
+          );
+        }
         map.set(f.path, list);
       }
+      return map;
+    }
+
+    if (recursiveRef.current) {
+      const folders = foldersRef.current;
+      const perFolder = folders.map((f) => {
+        const byKey = new Map<string, VideoEntry>();
+        for (const v of videosRef.current.get(f.path) ?? []) {
+          byKey.set(pairKeyOf(v, true), v);
+        }
+        return byKey;
+      });
+      let keys: string[];
+      if (folders.length === 0) {
+        keys = [];
+      } else if (intersectionMode && folders.length >= 2) {
+        let common: Set<string> | null = null;
+        for (const m of perFolder) {
+          const s = new Set(m.keys());
+          if (common === null) {
+            common = s;
+          } else {
+            for (const k of [...common]) {
+              if (!s.has(k)) common.delete(k);
+            }
+          }
+        }
+        keys = [...(common ?? new Set<string>())];
+      } else {
+        const union = new Set<string>();
+        for (const m of perFolder) {
+          for (const k of m.keys()) union.add(k);
+        }
+        keys = [...union];
+      }
+      keys.sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }),
+      );
+      if (q) keys = keys.filter((k) => k.toLowerCase().includes(q));
+      folders.forEach((f, i) => {
+        const m = perFolder[i];
+        map.set(
+          f.path,
+          keys.map((k) => m.get(k) ?? missingEntry(k)),
+        );
+      });
       return map;
     }
 
@@ -146,7 +226,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
       map.set(f.path, filtered);
     }
     return map;
-  }, [tick, searchQuery, intersectionMode]);
+  }, [tick, searchQuery, intersectionMode, recursiveMode]);
 
   const filteredVideosRef = useRef(filteredVideos);
   filteredVideosRef.current = filteredVideos;
@@ -188,7 +268,8 @@ export function useVideoCompare(): UseVideoCompareReturn {
     for (const f of foldersRef.current) {
       const list = filteredVideosRef.current.get(f.path) ?? [];
       const idx = indicesRef.current.get(f.path) ?? 0;
-      map.set(f.path, list[idx] ?? null);
+      const entry = list[idx];
+      map.set(f.path, entry && !entry.missing ? entry : null);
     }
     return map;
   }, [filteredVideos, tick]);
@@ -232,8 +313,9 @@ export function useVideoCompare(): UseVideoCompareReturn {
       if (foldersRef.current.some((f) => f.path === trimmed)) return;
       let videos: VideoEntry[] = [];
       try {
-        const result = await listVideos(trimmed);
+        const result = await listVideos(trimmed, recursiveRef.current);
         videos = result.videos;
+        if (result.truncated) setTruncated(true);
       } catch {
         videos = [];
       }
@@ -287,6 +369,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
     infosRef.current = new Map();
     setIntersectionModeState(false);
     setSearchQuery('');
+    setTruncated(false);
     forceUpdate();
   }, [forceUpdate]);
 
@@ -385,12 +468,17 @@ export function useVideoCompare(): UseVideoCompareReturn {
     [applyBlindIndex, forceUpdate],
   );
 
+  // Align every window to the entry whose pairing key matches `key`
+  // (file name in flat mode, folder-relative path in recursive mode).
   const alignByName = useCallback(
-    (folderPath: string, videoName: string) => {
+    (folderPath: string, key: string) => {
       const list = filteredVideosRef.current.get(folderPath);
-      if (!list || !videoName) return;
-      if (blindRef.current) {
-        const idx = list.findIndex((v) => v.name === videoName);
+      if (!list || !key) return;
+      const blind = blindRef.current;
+      const recursive = blind ? blind.recursive : recursiveRef.current;
+      const keyOf = (v: VideoEntry) => pairKeyOf(v, recursive);
+      if (blind) {
+        const idx = list.findIndex((v) => keyOf(v) === key);
         if (idx >= 0) {
           blindIndexRef.current = idx;
           applyBlindIndex();
@@ -398,7 +486,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
         }
         return;
       }
-      const srcIdx = list.findIndex((v) => v.name === videoName);
+      const srcIdx = list.findIndex((v) => keyOf(v) === key);
       if (srcIdx < 0) return;
       const next = new Map(indicesRef.current);
       for (const f of foldersRef.current) {
@@ -407,7 +495,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
           next.set(f.path, 0);
           continue;
         }
-        const found = l.findIndex((v) => v.name === videoName);
+        const found = l.findIndex((v) => keyOf(v) === key);
         const targetIdx = found >= 0 ? found : Math.min(srcIdx, l.length - 1);
         next.set(f.path, Math.max(0, Math.min(targetIdx, l.length - 1)));
       }
@@ -423,12 +511,71 @@ export function useVideoCompare(): UseVideoCompareReturn {
     setIntersectionModeState(b);
   }, []);
 
+  // Toggle subfolder-inclusive listing. Re-lists every selected folder with
+  // the new flag so all columns share the same pairing key basis; no-op while
+  // a blind session is running.
+  const setRecursiveMode = useCallback(
+    async (b: boolean) => {
+      if (blindRef.current) {
+        alert(t('blind.locked.recursive'));
+        return;
+      }
+      if (b === recursiveRef.current) return;
+      const folders = foldersRef.current;
+      const results = await Promise.all(
+        folders.map((f) =>
+          listVideos(f.path, b)
+            .then((r) => ({ videos: r.videos, truncated: !!r.truncated }))
+            .catch(() => ({ videos: [] as VideoEntry[], truncated: false })),
+        ),
+      );
+      const nextVideos = new Map<string, VideoEntry[]>();
+      folders.forEach((f, i) => nextVideos.set(f.path, results[i].videos));
+      setTruncated(results.some((r) => r.truncated));
+      videosRef.current = nextVideos;
+      recursiveRef.current = b;
+      setRecursiveModeState(b);
+      try {
+        localStorage.setItem(RECURSIVE_STORAGE_KEY, b ? '1' : '0');
+      } catch {
+        // ignore persistence failures
+      }
+      const nextIdx = new Map<string, number>();
+      for (const f of folders) nextIdx.set(f.path, 0);
+      indicesRef.current = nextIdx;
+      forceUpdate();
+    },
+    [forceUpdate],
+  );
+
   // Jump the video list to the given video file (used when clicking a video
   // in the folder tree). Only acts if the video's parent folder has already
   // been added to the compare list. Returns true if a jump happened.
   const selectVideoByPath = useCallback(
     (videoPath: string): boolean => {
       if (blindRef.current) return false;
+      const target = normalizePath(videoPath);
+      if (recursiveRef.current) {
+        // The clicked video may live in a nested subfolder of a selected
+        // folder; locate the folder that contains it and align every window
+        // to the same (shared) key position.
+        for (const f of foldersRef.current) {
+          const prefix = normalizePath(f.path).replace(/\/+$/, '') + '/';
+          if (!target.startsWith(prefix)) continue;
+          const list = filteredVideosRef.current.get(f.path) ?? [];
+          const idx = list.findIndex((v) => v.path === videoPath);
+          if (idx < 0) continue;
+          const next = new Map(indicesRef.current);
+          for (const g of foldersRef.current) {
+            const gl = filteredVideosRef.current.get(g.path) ?? [];
+            next.set(g.path, gl.length === 0 ? 0 : Math.min(idx, gl.length - 1));
+          }
+          indicesRef.current = next;
+          forceUpdate();
+          return true;
+        }
+        return false;
+      }
       const parent = normalizePath(getParentPath(videoPath));
       const folder = foldersRef.current.find(
         (f) => normalizePath(f.path) === parent,
@@ -462,6 +609,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
         displayOrders: result.display_orders,
         outputPath: result.output_path,
         winLists: result.win_lists,
+        recursive: recursiveRef.current,
       };
       prevModeRef.current = { intersectionMode, searchQuery };
       setIntersectionModeState(false);
@@ -525,6 +673,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
     blind = {
       aliases: blindRuntime.aliases,
       order: blindRuntime.order,
+      recursive: blindRuntime.recursive,
       displayOrders: blindRuntime.displayOrders,
       outputPath: blindRuntime.outputPath,
       index: blindIndexRef.current,
@@ -556,6 +705,9 @@ export function useVideoCompare(): UseVideoCompareReturn {
     setSearchQuery,
     intersectionMode,
     setIntersectionMode,
+    recursiveMode,
+    setRecursiveMode,
+    truncated,
     blind,
     enterBlind,
     exitBlind,

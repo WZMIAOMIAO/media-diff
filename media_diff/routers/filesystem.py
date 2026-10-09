@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from media_diff.utils.filesystem import (
+    MAX_RECURSIVE_ENTRIES,
     get_default_browse_path,
     get_roots,
     list_images,
@@ -27,6 +28,7 @@ class ImagesRequest(BaseModel):
 
 class VideosRequest(BaseModel):
     path: str
+    recursive: bool = False
 
 
 def _resolve_path(path: str) -> str:
@@ -117,8 +119,8 @@ def list_videos_endpoint(req: VideosRequest):
         raise HTTPException(status_code=403, detail="无权限访问该路径")
 
     try:
-        videos = list_videos(normalized)
+        videos = list_videos(normalized, recursive=req.recursive)
     except PermissionError:
         raise HTTPException(status_code=403, detail="无权限访问该路径")
 
-    return {"videos": videos}
+    return {"videos": videos, "truncated": len(videos) >= MAX_RECURSIVE_ENTRIES}

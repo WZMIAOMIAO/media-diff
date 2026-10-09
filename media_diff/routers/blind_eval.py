@@ -14,6 +14,7 @@ class SetupRequest(BaseModel):
     output_path: str
     load_existing: bool = False
     media: str = "image"
+    recursive: bool = False
 
 
 class VoteRequest(BaseModel):
@@ -46,6 +47,7 @@ def setup(req: SetupRequest):
             output_path=req.output_path,
             load_existing=req.load_existing,
             media=req.media,
+            recursive=req.recursive,
         )
     except blind_eval.BlindEvalError as exc:
         _raise(exc)

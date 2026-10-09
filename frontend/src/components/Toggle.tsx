@@ -25,7 +25,7 @@ export default function Toggle({ checked, onChange, color = '#4a9eff', label, di
         />
       </span>
       {label && (
-        <span style={{ color: checked ? color : '#888888' }}>
+        <span className="whitespace-nowrap" style={{ color: checked ? color : '#888888' }}>
           {label}
         </span>
       )}

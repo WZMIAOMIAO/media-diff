@@ -5,6 +5,10 @@ export type { HistogramData, SelectedFolder, WatermarkConfig };
 export interface VideoEntry {
   name: string;
   path: string;
+  /** 递归列出时相对所选根目录的路径（posix 分隔符）；扁平模式为 undefined */
+  rel?: string;
+  /** 前端注入的对齐占位项：该 key 在本文件夹中不存在 */
+  missing?: boolean;
 }
 
 export interface VideoInfo {

@@ -135,13 +135,15 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
   }
 
   const blindName = blind ? blind.order[blind.index] : undefined;
+  const blindKeyOf = (v: VideoEntry) =>
+    blind?.recursive ? v.rel ?? v.name : v.name;
 
   const allWindows: WindowInfo[] = selectedFolders.map((f, i) => {
     if (blind) {
       const order = (blindName && blind.displayOrders[blindName]) || selectedFolders.map((_, k) => k);
       const folder = selectedFolders[order[i] ?? i] ?? f;
       const video =
-        (filteredVideos.get(folder.path) ?? []).find((v) => v.name === blindName) ?? null;
+        (filteredVideos.get(folder.path) ?? []).find((v) => blindKeyOf(v) === blindName) ?? null;
       return { index: i, folderPath: folder.path, video };
     }
     return { index: i, folderPath: f.path, video: currentVideos.get(f.path) ?? null };

@@ -73,18 +73,27 @@ function VideoThumbnailPanel({ compare }: VideoThumbnailPanelProps) {
           ←
         </button>
         <span className="text-sm text-[#e0e0e0] whitespace-nowrap">{t('panel.videoList')}</span>
-        {showIntersection && (
-          <div className="ml-1">
-            <Toggle
-              checked={compare.intersectionMode}
-              onChange={(v) => compare.setIntersectionMode(v)}
-              disabled={!!compare.blind}
-              color="#4a9eff"
-              label={t('panel.intersection')}
-            />
-          </div>
-        )}
         <div className="flex-1" />
+      </div>
+      <div className="shrink-0 flex flex-wrap items-center gap-x-4 gap-y-1 px-2 py-1 border-b border-[#3c3c3c]">
+        <div title={t('panel.includeSubfoldersTip')}>
+          <Toggle
+            checked={compare.recursiveMode}
+            onChange={(v) => void compare.setRecursiveMode(v)}
+            disabled={!!compare.blind || compare.selectedFolders.length === 0}
+            color="#4a9eff"
+            label={t('panel.includeSubfolders')}
+          />
+        </div>
+        {showIntersection && (
+          <Toggle
+            checked={compare.intersectionMode}
+            onChange={(v) => compare.setIntersectionMode(v)}
+            disabled={!!compare.blind}
+            color="#4a9eff"
+            label={t('panel.intersection')}
+          />
+        )}
       </div>
       <div className="shrink-0 flex items-center gap-2 px-2 py-1 border-b border-[#3c3c3c]">
         <input
@@ -114,6 +123,12 @@ function VideoThumbnailPanel({ compare }: VideoThumbnailPanelProps) {
         </div>
       )}
 
+      {compare.truncated && (
+        <div className="px-2 py-1 text-xs text-[#fbbf24] border-b border-[#3c3c3c]">
+          {t('panel.truncated')}
+        </div>
+      )}
+
       <div className="flex-1 min-h-0 flex">
         {compare.selectedFolders.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-sm text-[#888888]">
@@ -132,7 +147,11 @@ function VideoThumbnailPanel({ compare }: VideoThumbnailPanelProps) {
                 currentIndex={compare.currentVideoIndices.get(f.path) ?? 0}
                 onSelect={(idx, e) => {
                   if (e.ctrlKey || e.metaKey) {
-                    compare.alignByName(f.path, filtered[idx]?.name ?? '');
+                    const entry = filtered[idx];
+                    const key = compare.recursiveMode
+                      ? entry?.rel ?? entry?.name ?? ''
+                      : entry?.name ?? '';
+                    compare.alignByName(f.path, key);
                   } else {
                     compare.setCurrentVideoIndex(f.path, idx);
                   }

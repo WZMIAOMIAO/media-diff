@@ -469,6 +469,7 @@ export function useImageCompare(): UseImageCompareReturn {
     blind = {
       aliases: blindRuntime.aliases,
       order: blindRuntime.order,
+      recursive: false,
       displayOrders: blindRuntime.displayOrders,
       outputPath: blindRuntime.outputPath,
       index: blindIndexRef.current,

@@ -87,7 +87,7 @@ function VideoThumbnailColumn({
               const idx = start + i;
               return (
                 <div
-                  key={vid.path}
+                  key={idx}
                   style={{
                     position: 'absolute',
                     top: idx * ITEM_HEIGHT,

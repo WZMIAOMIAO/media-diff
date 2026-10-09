@@ -52,12 +52,16 @@ export interface BlindSetupParams {
   output_path: string;
   load_existing?: boolean;
   media?: BlindMedia;
+  /** 递归（含子文件夹）时按相对路径配对 */
+  recursive?: boolean;
 }
 
 /** Runtime blind evaluation state exposed by the compare hooks. */
 export interface BlindEvalApi {
   aliases: Record<string, string>;
   order: string[];
+  /** 盲评的配对 key 是否为相对路径（递归模式） */
+  recursive: boolean;
   displayOrders: Record<string, number[]>;
   outputPath: string;
   index: number;

@@ -162,6 +162,55 @@ def test_api_setup_video(client, tmp_path):
     assert res.json()["common_files"] == ["v.mp4"]
 
 
+def test_common_file_names_recursive_uses_rel(tmp_path):
+    def make_videos(root, rels):
+        for rel in rels:
+            f = root / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_bytes(b"")
+
+    a = tmp_path / "A"
+    b = tmp_path / "B"
+    # same relative path -> common; same basename at different paths -> not common
+    make_videos(a, ["sub1/v.mp4", "sub2/v.mp4", "solo_a.mp4"])
+    make_videos(b, ["sub1/v.mp4", "sub3/v.mp4", "solo_b.mp4"])
+    common = blind_eval.common_file_names([str(a), str(b)], media="video", recursive=True)
+    assert common == ["sub1/v.mp4"]
+
+
+def test_common_file_names_recursive_image_rejected(tmp_path):
+    a = tmp_path / "A"
+    b = tmp_path / "B"
+    make_folder(a, ["x.png"])
+    make_folder(b, ["x.png"])
+    with pytest.raises(blind_eval.BlindEvalError):
+        blind_eval.common_file_names([str(a), str(b)], media="image", recursive=True)
+
+
+def test_api_setup_recursive_video(client, tmp_path):
+    a = tmp_path / "A"
+    b = tmp_path / "B"
+    (a / "sub").mkdir(parents=True)
+    (b / "sub").mkdir(parents=True)
+    (a / "sub" / "v.mp4").write_bytes(b"")
+    (b / "sub" / "v.mp4").write_bytes(b"")
+    out = str(tmp_path / "recursive_results.json")
+    res = client.post(
+        "/api/blind-eval/setup",
+        json={
+            "paths": [str(a), str(b)],
+            "total_parts": 1,
+            "current_part": 1,
+            "seed": 1,
+            "output_path": out,
+            "media": "video",
+            "recursive": True,
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["common_files"] == ["sub/v.mp4"]
+
+
 def test_api_setup_and_vote(client, folders, tmp_path):
     out = str(tmp_path / "blind_review_results.json")
     res = client.post(

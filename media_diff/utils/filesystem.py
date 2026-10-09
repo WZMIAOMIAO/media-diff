@@ -5,6 +5,10 @@ import sys
 from media_diff.config import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from media_diff.utils.security import get_access_root
 
+# Safety cap for recursive scans so a pathological tree cannot produce an
+# unbounded response. Callers surface truncation via the ``truncated`` flag.
+MAX_RECURSIVE_ENTRIES = 5000
+
 
 def get_roots() -> list[str]:
     root = get_access_root()
@@ -109,17 +113,38 @@ def list_json_files(path: str) -> list[dict]:
     return files
 
 
-def list_videos(path: str) -> list[dict]:
+def list_videos(path: str, recursive: bool = False) -> list[dict]:
     base = path
     videos: list[dict] = []
     try:
-        with os.scandir(base) as it:
-            for entry in it:
-                if entry.is_file():
-                    ext = os.path.splitext(entry.name)[1].lower()
-                    if ext in VIDEO_EXTENSIONS:
-                        videos.append({"name": entry.name, "path": entry.path})
+        if recursive:
+            # Walk the tree but never follow symlinks and skip hidden
+            # entries, so the scan stays inside the selected folder.
+            for dirpath, dirnames, filenames in os.walk(base):
+                dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+                for name in filenames:
+                    if name.startswith("."):
+                        continue
+                    ext = os.path.splitext(name)[1].lower()
+                    if ext not in VIDEO_EXTENSIONS:
+                        continue
+                    full = os.path.join(dirpath, name)
+                    rel = os.path.relpath(full, base).replace(os.sep, "/")
+                    videos.append({"name": name, "path": full, "rel": rel})
+                    if len(videos) >= MAX_RECURSIVE_ENTRIES:
+                        videos.sort(key=lambda x: x["rel"].lower())
+                        return videos
+        else:
+            with os.scandir(base) as it:
+                for entry in it:
+                    if entry.is_file():
+                        ext = os.path.splitext(entry.name)[1].lower()
+                        if ext in VIDEO_EXTENSIONS:
+                            videos.append({"name": entry.name, "path": entry.path})
     except PermissionError:
         raise
-    videos.sort(key=lambda x: x["name"].lower())
+    if recursive:
+        videos.sort(key=lambda x: x["rel"].lower())
+    else:
+        videos.sort(key=lambda x: x["name"].lower())
     return videos

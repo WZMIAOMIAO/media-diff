@@ -34,11 +34,14 @@ export async function browseFolderVideo(path: string): Promise<VideoBrowseResult
   };
 }
 
-export async function listVideos(path: string): Promise<{ videos: VideoEntry[] }> {
+export async function listVideos(
+  path: string,
+  recursive = false,
+): Promise<{ videos: VideoEntry[]; truncated?: boolean }> {
   const res = await fetch(`${API_BASE}/filesystem/videos`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
+    body: JSON.stringify({ path, recursive }),
   });
   if (!res.ok) throw new Error(t('api.videoListFailed'));
   return res.json();

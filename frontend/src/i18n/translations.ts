@@ -54,10 +54,14 @@ export const zh: Dict = {
   'panel.preview': '预览图',
   'panel.videoList': '视频列表',
   'panel.intersection': '交集',
+  'panel.includeSubfolders': '含子文件夹',
+  'panel.includeSubfoldersTip': '递归列出所选文件夹下的所有视频，并按相对路径对齐两侧',
+  'panel.truncated': '文件过多，已截断显示（上限 5000）',
   'panel.clearSearch': '清除搜索',
   'panel.filter': '过滤: {query}',
   'panel.emptyHint': '请通过右键菜单添加对比文件夹',
   'column.noMatch': '无匹配结果',
+  'item.noCounterpart': '无对应视频',
 
   // window / compare area
   'window.noImage': '无图片',
@@ -140,6 +144,8 @@ export const zh: Dict = {
   'blind.locked.add': '盲评模式下请先退出盲评再添加对比目录',
   'blind.locked.remove': '盲评模式下请先退出盲评再删除对比目录',
   'blind.locked.clear': '盲评模式下请先退出盲评再清除对比目录',
+  'blind.locked.recursive': '盲评模式下请先退出盲评再切换子文件夹',
+  'blind.recursiveHint': '递归模式按相对路径配对，盲评结果不可与扁平模式混用',
   'blind.voteFailed': '保存投票失败',
   'limit.folders': '不支持超过4个对比文件夹',
 
@@ -252,10 +258,14 @@ export const en: Dict = {
   'panel.preview': 'Preview',
   'panel.videoList': 'Videos',
   'panel.intersection': 'Intersect',
+  'panel.includeSubfolders': 'Subfolders',
+  'panel.includeSubfoldersTip': 'List all videos under the selected folders recursively and align both sides by relative path',
+  'panel.truncated': 'Too many files; list truncated (limit 5000)',
   'panel.clearSearch': 'Clear search',
   'panel.filter': 'Filter: {query}',
   'panel.emptyHint': 'Add compared folders via the right-click menu',
   'column.noMatch': 'No matching result',
+  'item.noCounterpart': 'No counterpart',
 
   // window / compare area
   'window.noImage': 'No image',
@@ -338,6 +348,8 @@ export const en: Dict = {
   'blind.locked.add': 'Exit blind review before adding compared folders',
   'blind.locked.remove': 'Exit blind review before removing compared folders',
   'blind.locked.clear': 'Exit blind review before clearing compared folders',
+  'blind.locked.recursive': 'Exit blind review before toggling subfolders',
+  'blind.recursiveHint': 'Recursive mode pairs by relative path; blind result files are not compatible with flat mode',
   'blind.voteFailed': 'Failed to save vote',
   'limit.folders': 'At most 4 folders can be compared',
 

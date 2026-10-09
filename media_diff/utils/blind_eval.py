@@ -76,14 +76,31 @@ def _validate_folder(path: str) -> str:
     return normalized
 
 
-def _names_in_folder(path: str, media: str = "image") -> set[str]:
+def _names_in_folder(path: str, media: str = "image", recursive: bool = False) -> set[str]:
+    """Return the pairing keys of the media files in a folder.
+
+    When ``recursive`` is set the keys are paths relative to ``path`` (so a
+    mirrored subfolder layout pairs file-for-file). Otherwise they are plain
+    file names, matching the non-recursive comparison behaviour.
+    """
+    if recursive and media == "video":
+        items = list_videos(path, recursive=True)
+        return {item.get("rel", item["name"]) for item in items}
     lister = _MEDIA_LISTERS.get(media, list_images)
     return {item["name"] for item in lister(path)}
 
 
-def common_file_names(paths: list[str], media: str = "image") -> list[str]:
-    """Return the sorted intersection of file names across all folders."""
-    per_folder = [_names_in_folder(p, media) for p in paths]
+def common_file_names(
+    paths: list[str], media: str = "image", recursive: bool = False
+) -> list[str]:
+    """Return the sorted intersection of pairing keys across all folders.
+
+    Keys are file names by default, or folder-relative paths when ``recursive``
+    is set (video only).
+    """
+    if recursive and media != "video":
+        raise BlindEvalError("图片暂不支持递归盲评")
+    per_folder = [_names_in_folder(p, media, recursive) for p in paths]
     common = set.intersection(*per_folder) if per_folder else set()
     return sorted(common)
 
@@ -155,11 +172,14 @@ def setup(
     output_path: str,
     load_existing: bool = False,
     media: str = "image",
+    recursive: bool = False,
 ) -> dict:
     """Prepare a blind evaluation session.
 
     ``media`` selects which file names are intersected (``"image"`` or
-    ``"video"``); the rest of the flow is identical for both.
+    ``"video"``); the rest of the flow is identical for both. When
+    ``recursive`` is set (video only) the pairing keys are folder-relative
+    paths so mirrored subfolder trees align file-for-file.
     """
     if len(paths) < 2:
         raise BlindEvalError("盲评模式需要至少2个对比文件夹")
@@ -169,7 +189,7 @@ def setup(
     normalized = [_validate_folder(p) for p in paths]
     output = resolve_output_path(output_path)
 
-    common = common_file_names(normalized, media)
+    common = common_file_names(normalized, media, recursive)
     if not common:
         raise BlindEvalError("没有找到文件名相同的数据，无法进行盲评")
 

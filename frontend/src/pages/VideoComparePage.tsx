@@ -116,6 +116,7 @@ export default function VideoComparePage() {
           folders={compare.selectedFolders}
           filesPerFolder={compare.videosPerFolder}
           media="video"
+          recursive={compare.recursiveMode}
           onEnter={(result) => {
             compare.enterBlind(result);
             setBlindSetupOpen(false);

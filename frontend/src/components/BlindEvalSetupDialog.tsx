@@ -6,17 +6,27 @@ import { useI18n } from '../i18n';
 
 interface BlindEvalSetupDialogProps {
   folders: SelectedFolder[];
-  filesPerFolder: Map<string, { name: string }[]>;
+  filesPerFolder: Map<string, { name: string; rel?: string }[]>;
   media: BlindMedia;
+  /** 递归（含子文件夹）时按相对路径配对，需与对比页当前状态一致 */
+  recursive?: boolean;
   onEnter: (result: BlindSetupResult) => void;
   onClose: () => void;
 }
 
-function intersectionCount(folders: SelectedFolder[], filesPerFolder: Map<string, { name: string }[]>): number {
+function keyOf(item: { name: string; rel?: string }, recursive: boolean): string {
+  return recursive ? item.rel ?? item.name : item.name;
+}
+
+function intersectionCount(
+  folders: SelectedFolder[],
+  filesPerFolder: Map<string, { name: string; rel?: string }[]>,
+  recursive: boolean,
+): number {
   if (folders.length < 2) return 0;
   let common: Set<string> | null = null;
   for (const f of folders) {
-    const names = new Set((filesPerFolder.get(f.path) ?? []).map((i) => i.name));
+    const names = new Set((filesPerFolder.get(f.path) ?? []).map((i) => keyOf(i, recursive)));
     if (common === null) {
       common = names;
     } else {
@@ -28,7 +38,14 @@ function intersectionCount(folders: SelectedFolder[], filesPerFolder: Map<string
   return common ? common.size : 0;
 }
 
-function BlindEvalSetupDialog({ folders, filesPerFolder, media, onEnter, onClose }: BlindEvalSetupDialogProps) {
+function BlindEvalSetupDialog({
+  folders,
+  filesPerFolder,
+  media,
+  recursive = false,
+  onEnter,
+  onClose,
+}: BlindEvalSetupDialogProps) {
   const { t } = useI18n();
   const [totalParts, setTotalParts] = useState('1');
   const [currentPart, setCurrentPart] = useState('1');
@@ -38,8 +55,8 @@ function BlindEvalSetupDialog({ folders, filesPerFolder, media, onEnter, onClose
   const [loading, setLoading] = useState(false);
 
   const total = useMemo(
-    () => intersectionCount(folders, filesPerFolder),
-    [folders, filesPerFolder],
+    () => intersectionCount(folders, filesPerFolder, recursive),
+    [folders, filesPerFolder, recursive],
   );
   const noun = t(media === 'video' ? 'media.video' : 'media.image');
 
@@ -54,6 +71,7 @@ function BlindEvalSetupDialog({ folders, filesPerFolder, media, onEnter, onClose
         output_path: outputPath.trim(),
         load_existing: loadExisting,
         media,
+        recursive,
       });
       if (result.existing_file_matched && !loadExisting) {
         const load = window.confirm(
