@@ -7,6 +7,19 @@ export function toForwardSlashes(path: string): string {
   return path.replace(/\\/g, '/');
 }
 
+/**
+ * Whether ``path`` equals ``root`` or is contained in it. Used to drop stale
+ * tree roots from a previous (unrestricted) session when the server now runs
+ * with a restricted access root. Comparison uses forward slashes; note it is a
+ * UI-side convenience only — the server always re-validates every path.
+ */
+export function isWithinRoot(path: string, root: string): boolean {
+  const p = toForwardSlashes(path).replace(/\/+$/, '');
+  const r = toForwardSlashes(root).replace(/\/+$/, '');
+  if (r === '') return true; // root is the filesystem root
+  return p === r || p.startsWith(`${r}/`);
+}
+
 function getPathName(path: string): string {
   if (!path) return '';
   if (path === '/') return '/';

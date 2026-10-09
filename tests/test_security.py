@@ -122,3 +122,44 @@ def test_api_enforces_access_root(client, tmp_path, monkeypatch):
         ).status_code
         == 403
     )
+
+
+def test_caches_do_not_bypass_access_root(client, tmp_path, monkeypatch):
+    """Entries cached before a root was configured must not be served outside it.
+
+    Simulates the "populate caches unrestricted, then restart with --root" case:
+    every path is validated before any cache is consulted.
+    """
+    from media_diff.utils.cache import thumbnail_cache
+    from media_diff.utils.video_cache import video_info_cache
+
+    root = tmp_path / "allowed"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    img = outside / "a.png"
+    Image.new("RGB", (4, 4)).save(img)
+    vid = outside / "v.mp4"
+    vid.write_bytes(b"x")
+
+    # Caches populated while the server was unrestricted.
+    thumbnail_cache.put(str(img), 200, b"jpeg-bytes", "hist", img.stat().st_mtime)
+    video_info_cache.put(
+        str(vid), {"codec": "h264", "browser_playable": True}, vid.stat().st_mtime
+    )
+
+    monkeypatch.setattr(config, "ACCESS_ROOT", str(root))
+
+    assert (
+        client.get("/api/images/thumbnail", params={"path": str(img)}).status_code
+        == 403
+    )
+    assert client.get("/api/images/view", params={"path": str(img)}).status_code == 403
+    assert client.get("/api/videos/info", params={"path": str(vid)}).status_code == 403
+    assert (
+        client.get("/api/videos/stream", params={"path": str(vid)}).status_code == 403
+    )
+    assert (
+        client.get("/api/videos/frame", params={"path": str(vid), "frame": 1}).status_code
+        == 403
+    )

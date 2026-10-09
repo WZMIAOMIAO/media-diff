@@ -27,6 +27,17 @@ export async function getRoots(): Promise<{ roots: string[] }> {
   return res.json();
 }
 
+/**
+ * Configured access root (sandbox), or ``null`` when unrestricted. Used by the
+ * tree to discard persisted roots that fall outside a newly configured root.
+ */
+export async function getAccessRoot(): Promise<string | null> {
+  const res = await fetch(`${API_BASE}/health`);
+  if (!res.ok) return null;
+  const data = (await res.json()) as { root?: string | null };
+  return typeof data.root === 'string' && data.root ? data.root : null;
+}
+
 // Default directory for the folder browser: user home (Linux/macOS) or
 // Desktop (Windows).
 export async function getDefaultBrowsePath(): Promise<string> {

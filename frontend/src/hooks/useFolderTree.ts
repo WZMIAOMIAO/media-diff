@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { browseFolder, type BrowseResult } from '../api';
+import { browseFolder, getAccessRoot, type BrowseResult } from '../api';
 import { loadTreeRoots, saveTreeRoots } from '../utils/treeStorage';
+import { isWithinRoot } from '../utils/path';
 import type { TreeNode } from '../types';
 
 export type AddRootResult = 'ok' | 'not_exist' | 'exists';
@@ -81,6 +82,22 @@ export function useFolderTree(storageKey: string): FolderTreeApi {
     }
     hydratedRef.current = true;
     if (changed) forceUpdate();
+    // If the server runs with a restricted access root, drop any persisted root
+    // that is now outside it (it would only 403 on expand). UI convenience only;
+    // the server remains the source of truth.
+    getAccessRoot()
+      .then((root) => {
+        if (!root) return;
+        const kept = rootsRef.current.filter((p) => isWithinRoot(p, root));
+        if (kept.length === rootsRef.current.length) return;
+        for (const p of rootsRef.current) {
+          if (!kept.includes(p)) treeRef.current.delete(p);
+        }
+        rootsRef.current = kept;
+        persistRoots();
+        forceUpdate();
+      })
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
 
