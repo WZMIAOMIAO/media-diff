@@ -7,14 +7,18 @@
 export interface WatermarkStyle {
   color: string;
   fontSize: number;
+  outline: boolean;
 }
 
+// Version 2 data (no outline field) is still accepted; outline defaults to
+// false so previously saved color/size are preserved rather than reset.
 const VERSION = 2;
 
 interface StoredStyle {
   v: number;
   color: string;
   fontSize: number;
+  outline?: boolean;
 }
 
 export function loadWatermarkStyle(key: string): WatermarkStyle | null {
@@ -30,7 +34,12 @@ export function loadWatermarkStyle(key: string): WatermarkStyle | null {
     ) {
       return null;
     }
-    return { color: parsed.color, fontSize: parsed.fontSize };
+    return {
+      color: parsed.color,
+      fontSize: parsed.fontSize,
+      // Outline defaults to on (incl. old v2 data without the field).
+      outline: parsed.outline !== false,
+    };
   } catch {
     return null;
   }
@@ -40,7 +49,12 @@ export function saveWatermarkStyle(key: string, style: WatermarkStyle): void {
   try {
     localStorage.setItem(
       key,
-      JSON.stringify({ v: VERSION, color: style.color, fontSize: style.fontSize }),
+      JSON.stringify({
+        v: VERSION,
+        color: style.color,
+        fontSize: style.fontSize,
+        outline: style.outline,
+      }),
     );
   } catch {
     // ignore quota / private-mode errors

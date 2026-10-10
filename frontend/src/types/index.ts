@@ -27,6 +27,8 @@ export interface WatermarkConfig {
   text: string;
   color: string; // hex 如 #ff0000
   fontSize: number; // 8~72
+  /** 是否给文字描边（提升在复杂背景上的可读性） */
+  outline?: boolean;
 }
 
 export interface BlindSetupResult {

@@ -9,6 +9,7 @@ import {
 export const DEFAULT_WATERMARK_STYLE: WatermarkStyle = {
   color: '#ff0000',
   fontSize: 24,
+  outline: true,
 };
 
 /**
@@ -51,7 +52,12 @@ export function useWatermark(storageKey: string) {
     const map: Record<number, WatermarkConfig> = {};
     for (const [key, text] of Object.entries(texts)) {
       const index = Number(key);
-      map[index] = { text, color: style.color, fontSize: style.fontSize };
+      map[index] = {
+        text,
+        color: style.color,
+        fontSize: style.fontSize,
+        outline: style.outline,
+      };
     }
     return map;
   }, [texts, style]);

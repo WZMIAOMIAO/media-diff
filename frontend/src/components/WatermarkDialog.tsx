@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { SelectedFolder } from '../types';
 import type { WatermarkStyle } from '../utils/watermarkStorage';
+import Toggle from './Toggle';
 import { useI18n } from '../i18n';
 
 interface WatermarkDialogProps {
@@ -131,6 +132,16 @@ export default function WatermarkDialog({
                 className="w-20 pl-3 pr-8 py-1 text-sm text-right bg-[#1e1e1e] border border-[#3c3c3c] rounded-md text-[#e0e0e0] focus:outline-none focus:border-[#4a9eff] transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               <span className="text-xs text-[#888888]">px</span>
+            </div>
+
+            <div className="flex items-center gap-2 mt-3">
+              <span className="shrink-0 w-16 whitespace-nowrap text-xs text-[#888888]">{t('watermark.outline')}</span>
+              <Toggle
+                checked={style.outline}
+                onChange={(v) => onStyleChange({ outline: v })}
+                color="#4a9eff"
+              />
+              <span className="text-[11px] text-[#777777]">{t('watermark.outlineHint')}</span>
             </div>
           </div>
         </div>

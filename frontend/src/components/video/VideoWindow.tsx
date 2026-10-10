@@ -7,6 +7,7 @@ import { fetchVideoFrame } from '../../api/video';
 import { getVideoStreamUrl } from '../../api/video';
 import { getVideoTranscodeStatus, startVideoTranscode } from '../../api/video';
 import { clientToUV, getContentBox, EYEDROPPER_CURSOR } from '../../utils/colorSample';
+import { watermarkTextStyle } from '../../utils/watermark';
 import { isPointerInside } from '../../utils/pointer';
 import OverlayButtons from '../OverlayButtons';
 import ColorReadout, { type SamplePos } from '../ColorReadout';
@@ -641,11 +642,11 @@ export default function VideoWindow({
         {video && watermarkConfig?.text && (
           <div
             className="absolute top-1 left-1/2 -translate-x-1/2 z-10 pointer-events-none"
-            style={{
-              color: watermarkConfig.color,
-              fontSize: `${watermarkConfig.fontSize}px`,
-              paddingTop: '4px',
-            }}
+            style={watermarkTextStyle(
+              watermarkConfig.color,
+              watermarkConfig.fontSize,
+              watermarkConfig.outline,
+            )}
           >
             {watermarkConfig.text}
           </div>
