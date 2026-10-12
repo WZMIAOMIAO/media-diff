@@ -111,6 +111,36 @@ def test_list_images_recursive_returns_sorted_rel(client, tmp_path):
     assert all(".hidden" not in i["path"] for i in body["images"])
 
 
+def test_natural_sort_key_numeric_aware():
+    from media_diff.utils.filesystem import natural_sort_key
+
+    names = ["iter_10", "iter_2", "iter_1", "exp_a10", "exp_a2", "exp_a1"]
+    assert sorted(names, key=natural_sort_key) == [
+        "exp_a1",
+        "exp_a2",
+        "exp_a10",
+        "iter_1",
+        "iter_2",
+        "iter_10",
+    ]
+
+
+def test_natural_sort_is_case_insensitive():
+    from media_diff.utils.filesystem import natural_sort_key
+
+    assert sorted(["B", "a", "c"], key=natural_sort_key) == ["a", "B", "c"]
+
+
+def test_browse_subdirs_sorted_naturally(client, tmp_path):
+    root = tmp_path / "exp"
+    for name in ["iter_10", "iter_2", "iter_1", "baseline"]:
+        (root / name).mkdir(parents=True)
+    res = client.post("/api/filesystem/browse", json={"path": str(root)})
+    assert res.status_code == 200
+    names = [s["name"] for s in res.json()["subdirs"]]
+    assert names == ["baseline", "iter_1", "iter_2", "iter_10"]
+
+
 def test_list_images_non_recursive_has_no_rel(client, tmp_path):
     root = _make_image_tree(tmp_path / "images")
     res = client.post("/api/filesystem/images", json={"path": str(root)})

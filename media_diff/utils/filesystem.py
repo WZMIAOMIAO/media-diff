@@ -1,4 +1,5 @@
 import os
+import re
 import string
 import sys
 
@@ -8,6 +9,31 @@ from media_diff.utils.security import get_access_root
 # Safety cap for recursive scans so a pathological tree cannot produce an
 # unbounded response. Callers surface truncation via the ``truncated`` flag.
 MAX_RECURSIVE_ENTRIES = 5000
+
+# Split a string into alternating non-digit / digit runs, e.g.
+# "iter_2" -> ["iter_", "2", ""], "run10b" -> ["run", "10", "b"].
+_NATURAL_SPLIT = re.compile(r"(\d+)")
+
+
+def natural_sort_key(value: str) -> tuple:
+    """Sort key giving a human-friendly, numeric-aware order.
+
+    Plain lexicographic ordering puts ``iter_10`` before ``iter_2``; this key
+    compares digit runs as numbers (so ``iter_2`` < ``iter_10``) while keeping
+    case-insensitive text order otherwise.
+
+    It returns ``(parts, value.lower())`` where ``parts`` alternates non-digit
+    and digit chunks. Because ``re.split`` with a capturing group always yields
+    the same parity (even index = text, odd index = digits), a given index is
+    never compared as int against str. The lower-cased original is a final
+    tie-breaker so equal-numeric names (e.g. ``01`` vs ``1``) order
+    deterministically instead of depending on directory scan order.
+    """
+    parts = [
+        int(part) if part.isdigit() else part.lower()
+        for part in _NATURAL_SPLIT.split(value)
+    ]
+    return (parts, value.lower())
 
 
 def get_roots() -> list[str]:
@@ -66,7 +92,7 @@ def list_subdirs(path: str) -> list[dict]:
                     )
     except PermissionError:
         raise
-    subdirs.sort(key=lambda x: x["name"].lower())
+    subdirs.sort(key=lambda x: natural_sort_key(x["name"]))
     return subdirs
 
 
@@ -96,7 +122,10 @@ def _list_media(
     try:
         if recursive:
             for dirpath, dirnames, filenames in os.walk(base):
-                dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+                dirnames[:] = sorted(
+                    (d for d in dirnames if not d.startswith(".")),
+                    key=natural_sort_key,
+                )
                 for name in filenames:
                     if name.startswith("."):
                         continue
@@ -107,7 +136,7 @@ def _list_media(
                     rel = os.path.relpath(full, base).replace(os.sep, "/")
                     items.append({"name": name, "path": full, "rel": rel})
                     if len(items) >= MAX_RECURSIVE_ENTRIES:
-                        items.sort(key=lambda x: x["rel"].lower())
+                        items.sort(key=lambda x: natural_sort_key(x["rel"]))
                         return items
         else:
             with os.scandir(base) as it:
@@ -119,9 +148,9 @@ def _list_media(
     except PermissionError:
         raise
     if recursive:
-        items.sort(key=lambda x: x["rel"].lower())
+        items.sort(key=lambda x: natural_sort_key(x["rel"]))
     else:
-        items.sort(key=lambda x: x["name"].lower())
+        items.sort(key=lambda x: natural_sort_key(x["name"]))
     return items
 
 
@@ -141,7 +170,7 @@ def list_json_files(path: str) -> list[dict]:
                         files.append({"name": entry.name, "path": entry.path})
     except PermissionError:
         raise
-    files.sort(key=lambda x: x["name"].lower())
+    files.sort(key=lambda x: natural_sort_key(x["name"]))
     return files
 
 

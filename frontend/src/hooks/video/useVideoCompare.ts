@@ -212,7 +212,12 @@ export function useVideoCompare(): UseVideoCompareReturn {
       if (q) {
         filtered = filtered.filter((v) => v.name.toLowerCase().includes(q));
       }
-      filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+      filtered = [...filtered].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        }),
+      );
       map.set(f.path, filtered);
     }
     return map;

@@ -211,7 +211,12 @@ export function useImageCompare(): UseImageCompareReturn {
       if (q) {
         filtered = filtered.filter((i) => i.name.toLowerCase().includes(q));
       }
-      filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+      filtered = [...filtered].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        }),
+      );
       map.set(f.path, filtered);
     }
     return map;
