@@ -1,3 +1,4 @@
+import logging
 import os
 
 from fastapi import APIRouter, HTTPException, Query
@@ -23,6 +24,8 @@ router = APIRouter(prefix="/api/videos", tags=["videos"])
 
 _NATIVE_EXTS = {".mp4", ".webm"}
 
+logger = logging.getLogger("media_diff.videos")
+
 
 def _validate_video_path(path: str) -> str:
     ensure_within_access_root(path)
@@ -30,18 +33,25 @@ def _validate_video_path(path: str) -> str:
     if not os.path.exists(normalized):
         raise HTTPException(status_code=404, detail="路径不存在")
     if not os.path.isfile(normalized):
+        logger.warning("video rejected (not a file): %s", normalized)
         raise HTTPException(status_code=400, detail="路径不是文件")
     ext = os.path.splitext(normalized)[1].lower()
 
     if ext not in VIDEO_EXTENSIONS:
+        logger.warning("video rejected (unsupported extension %s): %s", ext, normalized)
         raise HTTPException(status_code=400, detail="不支持的视频格式")
     return normalized
 
 
-def _handle_ffmpeg_error(exc: FFmpegError) -> None:
+def _handle_ffmpeg_error(exc: FFmpegError, path: str) -> None:
     detail = str(exc)
     if "未安装" in detail:
+        logger.error("ffmpeg unavailable while handling %s: %s", path, detail)
         raise HTTPException(status_code=500, detail=detail)
+    # The reason is logged here (the HTTP access log only shows "400 Bad
+    # Request"); it is usually the tail of ffmpeg's stderr, e.g. an unsupported
+    # codec or a truncated/corrupt file.
+    logger.warning("video processing failed for %s: %s", path, detail)
     raise HTTPException(status_code=400, detail=f"视频处理失败: {detail}")
 
 
@@ -55,7 +65,7 @@ async def video_info(path: str = Query(..., description="视频文件绝对路�
     try:
         return await pool.run_ffmpeg("probe", lambda: get_video_info(normalized))
     except FFmpegError as exc:
-        _handle_ffmpeg_error(exc)
+        _handle_ffmpeg_error(exc, normalized)
         return  # unreachable
 
 
@@ -85,7 +95,7 @@ async def video_stream(path: str = Query(..., description="视频文件绝对路
                 purpose, lambda: get_playable_path(normalized)
             )
     except FFmpegError as exc:
-        _handle_ffmpeg_error(exc)
+        _handle_ffmpeg_error(exc, normalized)
         return  # unreachable
 
     ext = os.path.splitext(playable)[1].lower()
@@ -98,6 +108,7 @@ async def video_stream(path: str = Query(..., description="视频文件绝对路
     except PermissionError:
         raise HTTPException(status_code=403, detail="无权限访问该路径")
     except Exception as exc:
+        logger.warning("cannot stream %s: %s", playable, exc)
         raise HTTPException(status_code=400, detail=f"无法读取视频文件: {exc}")
 
 
@@ -147,7 +158,7 @@ async def video_frame(
             "extract", lambda: extract_frame_with_histogram(normalized, frame)
         )
     except FFmpegError as exc:
-        _handle_ffmpeg_error(exc)
+        _handle_ffmpeg_error(exc, normalized)
         return  # unreachable
     return Response(
         content=jpeg_bytes,
@@ -173,7 +184,7 @@ async def video_thumbnail(
             "thumbnail", lambda: make_video_thumbnail(normalized, size)
         )
     except FFmpegError as exc:
-        _handle_ffmpeg_error(exc)
+        _handle_ffmpeg_error(exc, normalized)
         return  # unreachable
     return Response(
         content=jpeg_bytes,
@@ -201,7 +212,7 @@ async def video_frame_histogram(
             "extract", lambda: extract_frame_with_histogram(normalized, frame)
         )
     except FFmpegError as exc:
-        _handle_ffmpeg_error(exc)
+        _handle_ffmpeg_error(exc, normalized)
         return  # unreachable
     import base64
     import json

@@ -94,8 +94,11 @@ def _run(cmd: list[str], timeout: float = 60.0) -> bytes:
     except subprocess.TimeoutExpired as exc:
         raise FFmpegError("ffmpeg/ffprobe 执行超时") from exc
     if proc.returncode != 0:
-        stderr = proc.stderr.decode("utf-8", errors="ignore")[:500]
-        raise FFmpegError(stderr or "ffmpeg/ffprobe 执行失败")
+        # The actual error is at the END of ffmpeg's stderr (the banner and
+        # stream info come first), so report the tail rather than the head.
+        lines = proc.stderr.decode("utf-8", errors="ignore").strip().splitlines()
+        detail = "\n".join(lines[-6:])[:600]
+        raise FFmpegError(detail or "ffmpeg/ffprobe 执行失败")
     return proc.stdout
 
 

@@ -130,6 +130,17 @@ media-diff clean --dry-run   # 只统计不删除
 
 > 视频功能依赖 ffmpeg。它通过 `imageio-ffmpeg` 依赖自动提供，无需系统单独安装；若系统存在 `ffprobe`，探测会使用它，否则自动回退到 `ffmpeg -i` 解析。
 
+### 视频请求返回 400
+
+读取某个视频时返回 `400 Bad Request`，表示该文件的处理被拒绝，**与服务器并发无关**（同目录其他视频正常即可排除配置问题）。响应体里的 `detail` 会带上原因，同时在**服务端日志**里也会记录一行 `video processing failed for <路径>: <原因>`。常见原因：
+
+- **不支持的扩展名**：不在支持列表内（见 `VIDEO_EXTENSIONS`）。这类文件也不会出现在视频列表里。
+- **编码/封装该服务器的 ffmpeg 不支持**：不同 ffmpeg 构建支持的解码器不同，部分编码（如 HEVC/AV1/ProRes、某些 10bit 或私有编码）可能解码失败。
+- **文件损坏/不完整**：如 `moov atom not found`、`Invalid data found when processing input`、`抽帧返回空数据` 等。
+- **路径不是普通文件**：如符号链接失效、挂载/权限导致无法 `stat`。
+
+排查：`tail -f` 服务端日志，或用 `curl -i 'http://<host>:<port>/api/videos/info?path=<URL编码后的绝对路径>'` 直接看 `detail`；必要时用同版本 `ffmpeg -i <文件>` 复现。若确认是该服务器的 ffmpeg 缺少对应解码器，可安装系统 ffmpeg 并用 `FFMPEG_BIN` 指定，或换用包含所需解码器的构建。
+
 ## 技术栈
 
 | 层 | 技术 |

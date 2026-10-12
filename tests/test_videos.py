@@ -260,3 +260,24 @@ def test_extract_frame_inflight_dedup(tmp_path, monkeypatch):
     assert calls["n"] == 1
     assert len(results) == 2
     assert results[0][0] == jpeg and results[1][0] == jpeg
+
+
+def test_run_reports_stderr_tail_not_banner():
+    """ffmpeg prints a long banner first; the real error is at the end."""
+    import sys
+
+    import pytest
+
+    from media_diff.utils.videos import FFmpegError, _run
+
+    script = (
+        "import sys\n"
+        "sys.stderr.write('banner line\\n' * 30)\n"
+        "sys.stderr.write('REAL ERROR: moov atom not found\\n')\n"
+        "sys.exit(1)\n"
+    )
+    with pytest.raises(FFmpegError) as exc:
+        _run([sys.executable, "-c", script])
+    message = str(exc.value)
+    assert "REAL ERROR: moov atom not found" in message
+    assert message.count("banner line") < 10  # only the tail is kept
