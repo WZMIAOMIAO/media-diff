@@ -8,11 +8,14 @@ def test_health(client):
     assert res.status_code == 200
     body = res.json()
     assert body["status"] == "ok"
+    assert body["service"] == "media-diff"
+    assert isinstance(body["pid"], int) and body["pid"] > 0
     assert set(body["concurrency"]) == {
         "extract",
         "transcode",
         "thumbnail",
         "probe",
+        "threads",
     }
 
 

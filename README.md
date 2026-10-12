@@ -63,9 +63,12 @@ media-diff
 | `--transcode-concurrency N` | 视频转码并发上限（默认 1） |
 | `--thumbnail-concurrency N` | 视频封面抽帧并发上限（默认 2） |
 | `--probe-concurrency N` | 视频元信息探测并发上限（默认 2） |
+| `--sync-threads N` | 同步端点（图片缩略图/直方图、文件系统列举等）线程池上限（默认 40） |
 | `--version` | 查看版本 |
 
-> **并发参数按用途分开**，也可用环境变量设置：`MEDIA_DIFF_EXTRACT_CONCURRENCY`、`MEDIA_DIFF_TRANSCODE_CONCURRENCY`、`MEDIA_DIFF_THUMBNAIL_CONCURRENCY`、`MEDIA_DIFF_PROBE_CONCURRENCY`（CLI 参数优先级更高）。多用户或高核数服务器可适当调大（如 32 核可设抽帧 16、转码 4；192 核可设更高）。所有希望使用同一批视频的用户会共享缓存与转码结果。
+> **并发参数按用途分开**，也可用环境变量设置：`MEDIA_DIFF_EXTRACT_CONCURRENCY`、`MEDIA_DIFF_TRANSCODE_CONCURRENCY`、`MEDIA_DIFF_THUMBNAIL_CONCURRENCY`、`MEDIA_DIFF_PROBE_CONCURRENCY`、`MEDIA_DIFF_SYNC_THREADS`（CLI 参数优先级更高）。多用户或高核数服务器可适当调大（如 32 核可设抽帧 16、转码 4；192 核可设更高）。所有希望使用同一批视频的用户会共享缓存与转码结果。
+
+> **多用户并发**：图片缩略图/直方图、文件系统列举等同步请求共用一个线程池（`--sync-threads`，默认 40）；视频抽帧/转码/探测则各有独立的 ffmpeg 进程池（见上）。健康检查 `/api/health` 为异步端点，不占用该线程池，因此即便并发很高，`media-diff status` / `stop` 也能正确判断实例状态，不会再因线程池被占满而误报 `unreachable`。并发用户很多时可按需调大 `--sync-threads` 与各 ffmpeg 并发。
 
 ### 限制访问目录（沙箱）
 
@@ -103,6 +106,13 @@ media-diff stop --force      # 跳过身份校验，强制结束进程
 
 `stop` 默认会先做健康检查确认目标确实是 media-diff 服务（防止 PID 被复用误杀），校验不通过会跳过并提示，可用 `--force` 强制结束。
 
+> **状态为 `unreachable` / `stop` 提示 "does not answer as media-diff"？** 表示注册表里记录的进程还活着，但健康探测 `/api/health` 没成功。常见原因：
+> - **并发过高**：`/api/health` 现为异步端点、不占用同步线程池，正常高并发下也能应答；如同步端点仍显吃力，可调大 `--sync-threads`。
+> - **PID 被回收**：进程被外部结束（终端断开、OOM）后 PID 被别的进程复用。注册时记录了进程**启动时间**作为身份标识，`status`/`stop` 据此识别并当作**已停止**清理，不再误报。
+> - **代理/绑定地址**：健康检查会**绕过 `http_proxy` 等代理**并**回退探测 `127.0.0.1`**。
+>
+> 若仍探测不到，可 `curl http://127.0.0.1:<port>/api/health` 自查；确认是残留条目时 `media-diff stop --force`。
+
 ### 清理缓存
 
 非原生格式（mkv/avi/mov/flv 等）播放时会转码为 mp4 缓存到系统临时目录，长期使用可能占用磁盘。可用以下命令清理：
@@ -116,7 +126,7 @@ media-diff clean --dry-run   # 只统计不删除
 
 启动时会自动检测：若目标 `host:port` 上已有 media-diff 在运行，会直接打开该地址而不是重复启动；若检测到其他端口的实例，会提示但仍在当前端口启动。
 
-> 实例信息记录在用户状态目录（Linux 为 `~/.local/state/media-diff/`，macOS 为 `~/Library/Application Support/media-diff/`，Windows 为 `%LOCALAPPDATA%\media-diff\`），可用环境变量 `MEDIA_DIFF_STATE_DIR` 覆盖。进程退出后会自动清理，失效条目也会在下次读取时按 PID 与健康检查剔除。
+> 实例信息记录在用户状态目录（Linux 为 `~/.local/state/media-diff/`，macOS 为 `~/Library/Application Support/media-diff/`，Windows 为 `%LOCALAPPDATA%\media-diff\`），可用环境变量 `MEDIA_DIFF_STATE_DIR` 覆盖。进程退出后会自动清理；失效条目会在下次读取时按 PID、**进程身份标识（启动时间，可识别 PID 复用）** 与健康检查剔除。
 
 > 视频功能依赖 ffmpeg。它通过 `imageio-ffmpeg` 依赖自动提供，无需系统单独安装；若系统存在 `ffprobe`，探测会使用它，否则自动回退到 `ffmpeg -i` 解析。
 

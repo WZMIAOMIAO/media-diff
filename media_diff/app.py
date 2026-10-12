@@ -6,19 +6,32 @@ single port are enough to run the whole tool.
 """
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
+import anyio
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from media_diff import __version__
+from media_diff import __version__, config
 from media_diff.routers import router as filesystem_router
 from media_diff.routers.blind_eval import router as blind_eval_router
 from media_diff.routers.images import router as images_router
 from media_diff.routers.videos import router as videos_router
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    # Raise the AnyIO worker threadpool used by FastAPI's sync (`def`) endpoints
+    # so that many concurrent users cannot starve the pool (which used to make
+    # even the liveness probe time out and the server look unreachable).
+    anyio.to_thread.current_default_thread_limiter().total_tokens = (
+        config.SYNC_THREAD_LIMIT
+    )
+    yield
 
 
 def create_app() -> FastAPI:
@@ -32,6 +45,7 @@ def create_app() -> FastAPI:
         title="Media Diff",
         version=__version__,
         description="Local web tool for side-by-side image and video comparison.",
+        lifespan=_lifespan,
     )
 
     app.add_middleware(
@@ -48,21 +62,31 @@ def create_app() -> FastAPI:
     app.include_router(blind_eval_router)
 
     @app.get("/api/health", tags=["health"])
-    def health() -> dict:
-        from media_diff import config
-
+    async def health() -> dict:
+        # Async on purpose: a sync endpoint runs in the AnyIO worker threadpool,
+        # which can be saturated by long blocking requests (image/video work),
+        # making the liveness probe time out and the server look unreachable.
+        # This handler does no blocking work, so serve it straight on the loop.
+        # Report the threadpool size actually in effect (set by the lifespan
+        # handler), not just the configured value, so it can be verified live.
+        try:
+            threads = anyio.to_thread.current_default_thread_limiter().total_tokens
+        except Exception:
+            threads = config.SYNC_THREAD_LIMIT
         return {
             "status": "ok",
             "service": "media-diff",
+            "pid": os.getpid(),
             "version": __version__,
             # Configured access root (sandbox); None means unrestricted.
             "root": config.ACCESS_ROOT or None,
-            # Exposed so deployments can confirm the configured ffmpeg concurrency.
+            # Exposed so deployments can confirm the configured concurrency.
             "concurrency": {
                 "extract": config.EXTRACT_CONCURRENCY,
                 "transcode": config.TRANSCODE_CONCURRENCY,
                 "thumbnail": config.THUMBNAIL_CONCURRENCY,
                 "probe": config.PROBE_CONCURRENCY,
+                "threads": threads,
             },
         }
 

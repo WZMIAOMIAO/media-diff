@@ -218,6 +218,16 @@ def _build_parser() -> argparse.ArgumentParser:
             "MEDIA_DIFF_PROBE_CONCURRENCY, default 2)"
         ),
     )
+    parser.add_argument(
+        "--sync-threads",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Worker threadpool size for synchronous endpoints, e.g. image "
+            "thumbnails (env MEDIA_DIFF_SYNC_THREADS, default 40)"
+        ),
+    )
 
     subparsers = parser.add_subparsers(dest="command")
     status = subparsers.add_parser(
@@ -401,6 +411,7 @@ _CONCURRENCY_ENV: dict[str, str] = {
     "transcode_concurrency": "MEDIA_DIFF_TRANSCODE_CONCURRENCY",
     "thumbnail_concurrency": "MEDIA_DIFF_THUMBNAIL_CONCURRENCY",
     "probe_concurrency": "MEDIA_DIFF_PROBE_CONCURRENCY",
+    "sync_threads": "MEDIA_DIFF_SYNC_THREADS",
 }
 
 

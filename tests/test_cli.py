@@ -83,12 +83,14 @@ def test_apply_concurrency_env(monkeypatch):
         transcode_concurrency=2,
         thumbnail_concurrency=3,
         probe_concurrency=5,
+        sync_threads=6,
     )
     cli._apply_concurrency_env(args)
     assert cli.os.environ["MEDIA_DIFF_EXTRACT_CONCURRENCY"] == "8"
     assert cli.os.environ["MEDIA_DIFF_TRANSCODE_CONCURRENCY"] == "2"
     assert cli.os.environ["MEDIA_DIFF_THUMBNAIL_CONCURRENCY"] == "3"
     assert cli.os.environ["MEDIA_DIFF_PROBE_CONCURRENCY"] == "5"
+    assert cli.os.environ["MEDIA_DIFF_SYNC_THREADS"] == "6"
 
 
 def test_apply_concurrency_env_ignores_none(monkeypatch):
@@ -103,6 +105,12 @@ def test_apply_concurrency_env_ignores_none(monkeypatch):
         )
     )
     assert cli.os.environ["MEDIA_DIFF_EXTRACT_CONCURRENCY"] == "7"
+
+
+def test_parser_accepts_sync_threads():
+    args = cli._build_parser().parse_args(["--sync-threads", "7"])
+    assert args.sync_threads == 7
+    assert cli._build_parser().parse_args([]).sync_threads is None
 
 
 def test_apply_root_env_sets_env(tmp_path, monkeypatch):

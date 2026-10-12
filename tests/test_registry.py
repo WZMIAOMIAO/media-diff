@@ -1,5 +1,7 @@
 import json
 import os
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
@@ -10,6 +12,37 @@ from media_diff import registry
 def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setenv("MEDIA_DIFF_STATE_DIR", str(tmp_path))
     yield
+
+
+@pytest.fixture
+def health_server():
+    """A tiny HTTP server answering ``/api/health`` like media-diff."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            if self.path == registry.HEALTH_PATH:
+                body = json.dumps({"service": "media-diff", "status": "ok"}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def log_message(self, *args):  # silence test output
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield port
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_state_dir_override(tmp_path):
@@ -62,6 +95,51 @@ def test_status_reports_running_flag():
     assert status[0]["running"] is False
 
 
+def test_register_records_start_token():
+    entry = registry.register("127.0.0.1", 8123, "0.1.0")
+    assert "start_token" in entry
+    # On Linux the token is readable from /proc; on other platforms it may be
+    # None, which still means "cannot verify" (kept alive conservatively).
+    if registry.process_start_token(os.getpid()) is not None:
+        assert entry["start_token"] == registry.process_start_token(os.getpid())
+
+
+def test_prune_drops_reused_pid():
+    if registry.process_start_token(os.getpid()) is None:
+        pytest.skip("process start token not available on this platform")
+    registry.register("127.0.0.1", 8123, "0.1.0")
+    instances = registry.load_instances()
+    # os.getpid() is alive, but the recorded token belongs to a different
+    # (gone) process -> the entry must be treated as stale.
+    instances[0]["start_token"] = "not-this-process"
+    registry.registry_path().write_text(json.dumps(instances), encoding="utf-8")
+    assert registry.prune() == []
+
+
+def test_stop_instance_reused_pid_is_not_running():
+    if registry.process_start_token(os.getpid()) is None:
+        pytest.skip("process start token not available on this platform")
+    registry.register("127.0.0.1", 8123, "0.1.0")
+    registry.unregister(os.getpid(), 8123)  # start from a clean registry
+    registry.registry_path().write_text(
+        json.dumps(
+            [
+                {
+                    "pid": os.getpid(),
+                    "host": "127.0.0.1",
+                    "port": 8123,
+                    "url": "http://127.0.0.1:8123",
+                    "start_token": "not-this-process",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    entry = registry.load_instances()[0]
+    assert registry.stop_instance(entry, force=False) == "not_running"
+    assert registry.load_instances() == []
+
+
 def test_is_process_alive_current_process():
     assert registry.is_process_alive(os.getpid()) is True
     assert registry.is_process_alive(2**31 - 1) is False
@@ -70,6 +148,27 @@ def test_is_process_alive_current_process():
 def test_url_for_wildcard_host():
     assert registry.url_for("0.0.0.0", 8000) == "http://127.0.0.1:8000"
     assert registry.url_for("127.0.0.1", 8000) == "http://127.0.0.1:8000"
+
+
+def test_health_check_ok(health_server):
+    payload = registry.health_check("127.0.0.1", health_server)
+    assert payload is not None
+    assert payload["service"] == "media-diff"
+
+
+def test_health_check_ignores_proxy_env(health_server, monkeypatch):
+    # A configured proxy must not be used for the localhost probe, otherwise a
+    # live server looks unreachable.
+    monkeypatch.setenv("http_proxy", "http://127.0.0.1:1")
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
+    payload = registry.health_check("127.0.0.1", health_server)
+    assert payload is not None
+
+
+def test_health_check_falls_back_to_loopback(health_server):
+    # Bind host is not locally routable; loopback fallback should still find it.
+    payload = registry.health_check("10.255.255.1", health_server, timeout=0.3)
+    assert payload is not None
 
 
 def test_stop_instance_not_running():

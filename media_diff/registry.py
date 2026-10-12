@@ -166,11 +166,72 @@ def _is_zombie(pid: int) -> bool:
     return data[close + 2 : close + 3] == b"Z"
 
 
-def health_check(host: str, port: int, timeout: float = 1.0) -> Optional[dict]:
-    """Return the health payload if a media-diff service answers, else None."""
-    url = url_for(host, port) + HEALTH_PATH
+def process_start_token(pid: int) -> Optional[str]:
+    """A stable per-process identity token (start time), or None if unknown.
+
+    ``is_process_alive`` cannot tell a live media-diff process apart from an
+    unrelated process that later reused the same PID. The kernel start time
+    (constant for a process's lifetime) lets us detect that reuse: if the token
+    recorded at registration no longer matches the running process, the entry
+    is stale and must be pruned rather than reported as an unresponsive server.
+    """
+    if pid <= 0:
+        return None
+    if sys.platform.startswith("linux"):
+        try:
+            with open(f"/proc/{pid}/stat", "rb") as handle:
+                data = handle.read()
+        except OSError:
+            return None
+        close = data.rfind(b")")
+        if close == -1:
+            return None
+        # After "pid (comm) " the fields start at state; starttime is field 22,
+        # i.e. index 19 of the remaining whitespace-separated fields.
+        fields = data[close + 2 :].split()
+        if len(fields) <= 19:
+            return None
+        return fields[19].decode("ascii", "ignore")
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:
+        result = subprocess.run(
+            ["ps", "-o", "lstart=", "-p", str(pid)],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    text = result.stdout.strip()
+    return text or None
+
+
+def _entry_is_alive(entry: dict) -> bool:
+    """True if the entry's process is still the same live process.
+
+    Falls back to a plain liveness check when no start token is recorded (e.g.
+    entries written by an older version) or it cannot be read.
+    """
+    pid = int(entry.get("pid") or -1)
+    if not is_process_alive(pid):
+        return False
+    token = entry.get("start_token")
+    if not token:
+        return True
+    current = process_start_token(pid)
+    if current is None:
+        return True
+    return current == token
+
+
+# Probe with an explicit empty ProxyHandler: a proxy configured in the
+# environment (http_proxy/https_proxy) would otherwise route the localhost
+# request through it and fail, making a live server look unreachable.
+_PROXY_FREE_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def _health_probe(url: str, timeout: float) -> Optional[dict]:
+    try:
+        with _PROXY_FREE_OPENER.open(url, timeout=timeout) as resp:
             if resp.status != 200:
                 return None
             payload = json.loads(resp.read().decode("utf-8"))
@@ -178,6 +239,26 @@ def health_check(host: str, port: int, timeout: float = 1.0) -> Optional[dict]:
         return None
     if isinstance(payload, dict) and payload.get("service") == SERVICE_NAME:
         return payload
+    return None
+
+
+def health_check(host: str, port: int, timeout: float = 1.0) -> Optional[dict]:
+    """Return the health payload if a media-diff service answers, else None.
+
+    The registry is local to this machine, so in addition to the recorded bind
+    host we also probe loopback. This keeps the check working when the server
+    was bound to a specific interface address (or a wildcard) that is not
+    directly reachable, avoiding false "unreachable"/"unverified" results.
+    """
+    candidates: list[str] = [url_for(host, port)]
+    for loop in ("127.0.0.1", "::1"):
+        candidate = url_for(loop, port)
+        if candidate not in candidates:
+            candidates.append(candidate)
+    for base in candidates:
+        payload = _health_probe(base + HEALTH_PATH, timeout)
+        if payload is not None:
+            return payload
     return None
 
 
@@ -190,6 +271,8 @@ def register(host: str, port: int, version: str) -> dict:
         "url": url_for(host, port),
         "version": version,
         "started_at": datetime.now().isoformat(timespec="seconds"),
+        # Identity token so a later PID reuse is not mistaken for this server.
+        "start_token": process_start_token(os.getpid()),
     }
     path = registry_path()
     with _file_lock(state_dir() / LOCK_FILENAME):
@@ -215,15 +298,11 @@ def unregister(pid: int, port: int) -> None:
 
 
 def prune() -> list[dict]:
-    """Drop entries whose process is no longer alive and return the rest."""
+    """Drop entries whose process is gone or whose PID was reused, return rest."""
     path = registry_path()
     with _file_lock(state_dir() / LOCK_FILENAME):
         instances = _read(path)
-        alive = [
-            item
-            for item in instances
-            if is_process_alive(int(item.get("pid", -1)))
-        ]
+        alive = [item for item in instances if _entry_is_alive(item)]
         if len(alive) != len(instances):
             _write(path, alive)
     return alive
@@ -286,7 +365,9 @@ def stop_instance(
     if pid <= 0:
         return "failed"
 
-    if not is_process_alive(pid):
+    # A recorded PID that is gone, or was reused by an unrelated process, is a
+    # stale entry: clean it up instead of treating it as an unresponsive server.
+    if not _entry_is_alive(entry):
         unregister(pid, port)
         return "not_running"
 
