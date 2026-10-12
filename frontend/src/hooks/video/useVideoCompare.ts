@@ -48,16 +48,6 @@ interface BlindRuntime {
   recursive: boolean;
 }
 
-const RECURSIVE_STORAGE_KEY = 'media-diff:video:recursive';
-
-function loadRecursiveMode(): boolean {
-  try {
-    return localStorage.getItem(RECURSIVE_STORAGE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
 /** Pairing key: file name in flat mode, folder-relative path in recursive mode. */
 function pairKeyOf(video: { name: string; rel?: string }, recursive: boolean): string {
   return recursive ? video.rel ?? video.name : video.name;
@@ -116,7 +106,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [intersectionMode, setIntersectionModeState] = useState(false);
-  const [recursiveMode, setRecursiveModeState] = useState(loadRecursiveMode);
+  const [recursiveMode, setRecursiveModeState] = useState(false);
   const recursiveRef = useRef(recursiveMode);
   const [truncated, setTruncated] = useState(false);
 
@@ -370,6 +360,8 @@ export function useVideoCompare(): UseVideoCompareReturn {
     setIntersectionModeState(false);
     setSearchQuery('');
     setTruncated(false);
+    recursiveRef.current = false;
+    setRecursiveModeState(false);
     forceUpdate();
   }, [forceUpdate]);
 
@@ -535,11 +527,6 @@ export function useVideoCompare(): UseVideoCompareReturn {
       videosRef.current = nextVideos;
       recursiveRef.current = b;
       setRecursiveModeState(b);
-      try {
-        localStorage.setItem(RECURSIVE_STORAGE_KEY, b ? '1' : '0');
-      } catch {
-        // ignore persistence failures
-      }
       const nextIdx = new Map<string, number>();
       for (const f of folders) nextIdx.set(f.path, 0);
       indicesRef.current = nextIdx;

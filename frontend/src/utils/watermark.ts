@@ -1,34 +1,16 @@
 import type { CSSProperties } from 'react';
 
-function hexToRgb(hex: string): [number, number, number] | null {
-  let h = hex.replace('#', '').trim();
-  if (h.length === 3) {
-    h = h
-      .split('')
-      .map((c) => c + c)
-      .join('');
-  }
-  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
-  return [
-    parseInt(h.slice(0, 2), 16),
-    parseInt(h.slice(2, 4), 16),
-    parseInt(h.slice(4, 6), 16),
-  ];
-}
-
-/** Pick a black or white outline that contrasts with the fill color. */
-export function contrastOutlineColor(color: string): string {
-  const rgb = hexToRgb(color);
-  if (!rgb) return '#000000';
-  const luminance = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
-  return luminance > 0.6 ? '#000000' : '#ffffff';
-}
-
 /**
- * Build the inline style for a watermark. When ``outline`` is enabled a solid
- * ring of text-shadows is drawn around the glyphs (a shadow does not eat into
- * the fill, unlike a centered text-stroke), so the text stays legible over
- * busy backgrounds.
+ * Build the inline style for a watermark. When ``outline`` is enabled a **soft
+ * glow** is drawn around the glyphs using layered blurred shadows (no hard
+ * ring).
+ *
+ * The glow layers **both a light and a dark halo**. A single-colour glow keyed
+ * to the fill (dark glow for bright text, light glow for dark text) disappears
+ * whenever it matches the unknown background — e.g. an orange/yellow watermark
+ * with a dark glow over a dark video looked like it had no effect. Having both
+ * colours guaranteed that one of them is always visible, while the blur keeps
+ * the edge soft. The light halo is listed first so it paints on top.
  */
 export function watermarkTextStyle(
   color: string,
@@ -41,17 +23,12 @@ export function watermarkTextStyle(
     paddingTop: '4px',
   };
   if (outline) {
-    const w = Math.max(1, Math.round(fontSize / 20));
-    const c = contrastOutlineColor(color);
+    const w = Math.max(1, Math.round(fontSize / 28));
     style.textShadow = [
-      `-${w}px -${w}px 0 ${c}`,
-      `${w}px -${w}px 0 ${c}`,
-      `-${w}px ${w}px 0 ${c}`,
-      `${w}px ${w}px 0 ${c}`,
-      `0 ${w}px 0 ${c}`,
-      `0 -${w}px 0 ${c}`,
-      `${w}px 0 0 ${c}`,
-      `-${w}px 0 0 ${c}`,
+      `0 0 ${w}px rgba(255,255,255,0.85)`,
+      `0 0 ${w}px rgba(0,0,0,0.75)`,
+      `0 0 ${w * 2}px rgba(255,255,255,0.35)`,
+      `0 0 ${w * 2}px rgba(0,0,0,0.4)`,
     ].join(', ');
   }
   return style;

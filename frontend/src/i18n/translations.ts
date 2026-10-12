@@ -61,6 +61,8 @@ export const zh: Dict = {
   'panel.filter': '过滤: {query}',
   'panel.emptyHint': '请通过右键菜单添加对比文件夹',
   'column.noMatch': '无匹配结果',
+  'column.emptyImage': '当前目录下未找到图像',
+  'column.emptyVideo': '当前目录下未找到视频',
   'item.noCounterpart': '无对应文件',
 
   // window / compare area
@@ -267,6 +269,8 @@ export const en: Dict = {
   'panel.filter': 'Filter: {query}',
   'panel.emptyHint': 'Add compared folders via the right-click menu',
   'column.noMatch': 'No matching result',
+  'column.emptyImage': 'No images found in this folder',
+  'column.emptyVideo': 'No videos found in this folder',
   'item.noCounterpart': 'No counterpart',
 
   // window / compare area

@@ -76,11 +76,9 @@ function VideoThumbnailColumn({
       </div>
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 min-h-0 overflow-y-auto">
         {total === 0 ? (
-          originalCount === 0 ? null : (
-            <div className="flex items-center justify-center h-full text-xs text-[#888888]">
-              {t('column.noMatch')}
-            </div>
-          )
+          <div className="flex items-center justify-center h-full px-3 text-center text-xs text-[#888888]">
+            {originalCount === 0 ? t('column.emptyVideo') : t('column.noMatch')}
+          </div>
         ) : (
           <div style={{ height: total * ITEM_HEIGHT, position: 'relative' }}>
             {visible.map((vid, i) => {

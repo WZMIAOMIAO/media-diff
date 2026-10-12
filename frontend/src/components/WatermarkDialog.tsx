@@ -59,15 +59,8 @@ export default function WatermarkDialog({
     setFontDraft(String(clamped));
   };
 
-  const backdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) onClose();
-  };
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onClick={backdropClick}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="w-[440px] max-h-[82vh] flex flex-col bg-[#2b2b2b] border border-[#3c3c3c] rounded-xl shadow-2xl overflow-hidden">
         <div className="flex items-center px-4 h-11 shrink-0 border-b border-[#3c3c3c]">
           <span className="text-sm font-medium text-[#e8e8e8]">{t('watermark.title')}</span>
