@@ -61,7 +61,7 @@ export const zh: Dict = {
   'panel.filter': '过滤: {query}',
   'panel.emptyHint': '请通过右键菜单添加对比文件夹',
   'column.noMatch': '无匹配结果',
-  'item.noCounterpart': '无对应视频',
+  'item.noCounterpart': '无对应文件',
 
   // window / compare area
   'window.noImage': '无图片',

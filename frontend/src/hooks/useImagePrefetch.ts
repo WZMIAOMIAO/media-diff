@@ -23,6 +23,7 @@ export function useImagePrefetch(compare: UseImageCompareReturn): void {
       const start = Math.max(0, idx - PREFETCH_RANGE);
       const end = Math.min(list.length, idx + PREFETCH_RANGE + 1);
       for (let i = start; i < end; i++) {
+        if (list[i].missing) continue;
         toFetch.add(list[i].path);
       }
     }

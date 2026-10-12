@@ -12,6 +12,10 @@ export interface SubDir {
 export interface FileEntry {
   name: string;
   path: string;
+  /** 递归列出时相对所选根目录的路径（posix 分隔符）；扁平模式为 undefined */
+  rel?: string;
+  /** 前端注入的对齐占位项：该 key 在本文件夹中不存在 */
+  missing?: boolean;
 }
 
 export interface BrowseResult {
@@ -65,11 +69,12 @@ export async function browseFolder(
 
 export async function listImages(
   path: string,
-): Promise<{ images: FileEntry[] }> {
+  recursive = false,
+): Promise<{ images: FileEntry[]; truncated?: boolean }> {
   const res = await fetch(`${API_BASE}/filesystem/images`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
+    body: JSON.stringify({ path, recursive }),
   });
   if (!res.ok) throw new Error(t('api.imageListFailed'));
   return res.json();

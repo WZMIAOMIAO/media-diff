@@ -104,6 +104,7 @@ export default function ImageComparePage() {
           folders={compare.selectedFolders}
           filesPerFolder={compare.imagesPerFolder}
           media="image"
+          recursive={compare.recursiveMode}
           onEnter={(result) => {
             compare.enterBlind(result);
             setBlindSetupOpen(false);

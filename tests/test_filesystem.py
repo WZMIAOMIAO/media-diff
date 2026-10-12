@@ -74,3 +74,47 @@ def test_list_videos_recursive_returns_sorted_rel(client, tmp_path):
     ]
     # hidden directories/files are skipped entirely
     assert all(".hidden" not in v["path"] for v in body["videos"])
+
+
+def _make_image_tree(root):
+    """Build a small image tree with nesting and entries to ignore."""
+    from PIL import Image
+
+    root.mkdir(parents=True)
+    Image.new("RGB", (8, 8)).save(root / "root.png")
+    sub = root / "sub"
+    sub.mkdir()
+    Image.new("RGB", (8, 8)).save(sub / "a.jpg")
+    (sub / "note.txt").write_text("ignored")
+    deep = sub / "deep"
+    deep.mkdir()
+    Image.new("RGB", (8, 8)).save(deep / "b.png")
+    hidden = root / ".hidden"
+    hidden.mkdir()
+    Image.new("RGB", (8, 8)).save(hidden / "secret.png")
+    return root
+
+
+def test_list_images_recursive_returns_sorted_rel(client, tmp_path):
+    root = _make_image_tree(tmp_path / "images")
+    res = client.post(
+        "/api/filesystem/images", json={"path": str(root), "recursive": True}
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["truncated"] is False
+    assert [i["rel"] for i in body["images"]] == [
+        "root.png",
+        "sub/a.jpg",
+        "sub/deep/b.png",
+    ]
+    assert all(".hidden" not in i["path"] for i in body["images"])
+
+
+def test_list_images_non_recursive_has_no_rel(client, tmp_path):
+    root = _make_image_tree(tmp_path / "images")
+    res = client.post("/api/filesystem/images", json={"path": str(root)})
+    assert res.status_code == 200
+    images = res.json()["images"]
+    assert [i["name"] for i in images] == ["root.png"]
+    assert all("rel" not in i for i in images)

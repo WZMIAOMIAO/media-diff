@@ -11,6 +11,27 @@ interface BlindRuntime {
   displayOrders: Record<string, number[]>;
   outputPath: string;
   winLists: Record<string, string[]>;
+  /** Whether the common file keys are folder-relative paths (recursive). */
+  recursive: boolean;
+}
+
+const RECURSIVE_STORAGE_KEY = 'media-diff:image:recursive';
+
+function loadRecursiveMode(): boolean {
+  try {
+    return localStorage.getItem(RECURSIVE_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Pairing key: file name in flat mode, folder-relative path in recursive mode. */
+function pairKeyOf(item: { name: string; rel?: string }, recursive: boolean): string {
+  return recursive ? item.rel ?? item.name : item.name;
+}
+
+function missingEntry(key: string): FileEntry {
+  return { name: '', path: '', rel: key, missing: true };
 }
 
 export interface UseImageCompareReturn {
@@ -41,6 +62,12 @@ export interface UseImageCompareReturn {
   // 交集模式
   intersectionMode: boolean;
   setIntersectionMode: (b: boolean) => void;
+
+  // 递归（含子文件夹）
+  recursiveMode: boolean;
+  setRecursiveMode: (b: boolean) => void;
+  /** True when a recursive listing hit the backend entry cap. */
+  truncated: boolean;
 
   // 盲评模式
   blind: BlindEvalApi | null;
@@ -84,6 +111,9 @@ export function useImageCompare(): UseImageCompareReturn {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [intersectionMode, setIntersectionModeState] = useState(false);
+  const [recursiveMode, setRecursiveModeState] = useState(loadRecursiveMode);
+  const recursiveRef = useRef(recursiveMode);
+  const [truncated, setTruncated] = useState(false);
 
   const blindRef = useRef<BlindRuntime | null>(null);
   const blindIndexRef = useRef(0);
@@ -104,13 +134,65 @@ export function useImageCompare(): UseImageCompareReturn {
       // 盲评模式：所有文件夹按当前份的 shuffle 顺序对齐同名图片。
       for (const f of foldersRef.current) {
         const imgs = imagesRef.current.get(f.path) ?? [];
-        const byName = new Map(imgs.map((i) => [i.name, i] as const));
+        const byKey = new Map(
+          imgs.map((i) => [pairKeyOf(i, blind.recursive), i] as const),
+        );
         let list = blind.order
-          .map((n) => byName.get(n))
+          .map((k) => byKey.get(k))
           .filter((x): x is FileEntry => x !== undefined);
-        if (q) list = list.filter((i) => i.name.toLowerCase().includes(q));
+        if (q) {
+          list = list.filter((i) =>
+            pairKeyOf(i, blind.recursive).toLowerCase().includes(q),
+          );
+        }
         map.set(f.path, list);
       }
+      return map;
+    }
+
+    if (recursiveRef.current) {
+      const folders = foldersRef.current;
+      const perFolder = folders.map((f) => {
+        const byKey = new Map<string, FileEntry>();
+        for (const i of imagesRef.current.get(f.path) ?? []) {
+          byKey.set(pairKeyOf(i, true), i);
+        }
+        return byKey;
+      });
+      let keys: string[];
+      if (folders.length === 0) {
+        keys = [];
+      } else if (intersectionMode && folders.length >= 2) {
+        let common: Set<string> | null = null;
+        for (const m of perFolder) {
+          const s = new Set(m.keys());
+          if (common === null) {
+            common = s;
+          } else {
+            for (const k of [...common]) {
+              if (!s.has(k)) common.delete(k);
+            }
+          }
+        }
+        keys = [...(common ?? new Set<string>())];
+      } else {
+        const union = new Set<string>();
+        for (const m of perFolder) {
+          for (const k of m.keys()) union.add(k);
+        }
+        keys = [...union];
+      }
+      keys.sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }),
+      );
+      if (q) keys = keys.filter((k) => k.toLowerCase().includes(q));
+      folders.forEach((f, i) => {
+        const m = perFolder[i];
+        map.set(
+          f.path,
+          keys.map((k) => m.get(k) ?? missingEntry(k)),
+        );
+      });
       return map;
     }
 
@@ -143,7 +225,7 @@ export function useImageCompare(): UseImageCompareReturn {
       map.set(f.path, filtered);
     }
     return map;
-  }, [tick, searchQuery, intersectionMode]);
+  }, [tick, searchQuery, intersectionMode, recursiveMode]);
 
   // 同步最新 filteredImages 给回调使用
   const filteredImagesRef = useRef(filteredImages);
@@ -197,8 +279,9 @@ export function useImageCompare(): UseImageCompareReturn {
       if (foldersRef.current.some((f) => f.path === trimmed)) return;
       let images: FileEntry[] = [];
       try {
-        const result = await listImages(trimmed);
+        const result = await listImages(trimmed, recursiveRef.current);
         images = result.images;
+        if (result.truncated) setTruncated(true);
       } catch {
         images = [];
       }
@@ -248,6 +331,7 @@ export function useImageCompare(): UseImageCompareReturn {
     indicesRef.current = new Map();
     setIntersectionModeState(false);
     setSearchQuery('');
+    setTruncated(false);
     forceUpdate();
   }, [forceUpdate]);
 
@@ -349,13 +433,17 @@ export function useImageCompare(): UseImageCompareReturn {
     [applyBlindIndex, forceUpdate],
   );
 
-  // Ctrl+点击：所有文件夹对齐到同名图片，找不到的回退到相同序号
+  // Ctrl+点击：所有文件夹对齐到相同配对 key 的图片（扁平=文件名，递归=相对路径），
+  // 找不到的回退到相同序号。
   const alignByName = useCallback(
-    (folderPath: string, imageName: string) => {
+    (folderPath: string, key: string) => {
       const list = filteredImagesRef.current.get(folderPath);
-      if (!list || !imageName) return;
-      if (blindRef.current) {
-        const idx = list.findIndex((i) => i.name === imageName);
+      if (!list || !key) return;
+      const blind = blindRef.current;
+      const recursive = blind ? blind.recursive : recursiveRef.current;
+      const keyOf = (i: FileEntry) => pairKeyOf(i, recursive);
+      if (blind) {
+        const idx = list.findIndex((i) => keyOf(i) === key);
         if (idx >= 0) {
           blindIndexRef.current = idx;
           applyBlindIndex();
@@ -363,7 +451,7 @@ export function useImageCompare(): UseImageCompareReturn {
         }
         return;
       }
-      const srcIdx = list.findIndex((i) => i.name === imageName);
+      const srcIdx = list.findIndex((i) => keyOf(i) === key);
       if (srcIdx < 0) return;
       const next = new Map(indicesRef.current);
       for (const f of foldersRef.current) {
@@ -372,7 +460,7 @@ export function useImageCompare(): UseImageCompareReturn {
           next.set(f.path, 0);
           continue;
         }
-        const found = l.findIndex((i) => i.name === imageName);
+        const found = l.findIndex((i) => keyOf(i) === key);
         const targetIdx = found >= 0 ? found : Math.min(srcIdx, l.length - 1);
         next.set(f.path, Math.max(0, Math.min(targetIdx, l.length - 1)));
       }
@@ -387,6 +475,41 @@ export function useImageCompare(): UseImageCompareReturn {
     if (b && foldersRef.current.length < 2) return;
     setIntersectionModeState(b);
   }, []);
+
+  // 递归（含子文件夹）开关：用新标志重列所有已选文件夹，盲评中禁用。
+  const setRecursiveMode = useCallback(
+    async (b: boolean) => {
+      if (blindRef.current) {
+        alert(t('blind.locked.recursive'));
+        return;
+      }
+      if (b === recursiveRef.current) return;
+      const folders = foldersRef.current;
+      const results = await Promise.all(
+        folders.map((f) =>
+          listImages(f.path, b)
+            .then((r) => ({ images: r.images, truncated: !!r.truncated }))
+            .catch(() => ({ images: [] as FileEntry[], truncated: false })),
+        ),
+      );
+      const nextImages = new Map<string, FileEntry[]>();
+      folders.forEach((f, i) => nextImages.set(f.path, results[i].images));
+      setTruncated(results.some((r) => r.truncated));
+      imagesRef.current = nextImages;
+      recursiveRef.current = b;
+      setRecursiveModeState(b);
+      try {
+        localStorage.setItem(RECURSIVE_STORAGE_KEY, b ? '1' : '0');
+      } catch {
+        // ignore persistence failures
+      }
+      const nextIndices = new Map<string, number>();
+      for (const f of folders) nextIndices.set(f.path, 0);
+      indicesRef.current = nextIndices;
+      forceUpdate();
+    },
+    [forceUpdate],
+  );
 
   const enterBlind = useCallback(
     (result: BlindSetupResult) => {
@@ -406,6 +529,7 @@ export function useImageCompare(): UseImageCompareReturn {
         displayOrders: result.display_orders,
         outputPath: result.output_path,
         winLists: result.win_lists,
+        recursive: recursiveRef.current,
       };
       prevModeRef.current = { intersectionMode, searchQuery };
       setIntersectionModeState(false);
@@ -469,7 +593,7 @@ export function useImageCompare(): UseImageCompareReturn {
     blind = {
       aliases: blindRuntime.aliases,
       order: blindRuntime.order,
-      recursive: false,
+      recursive: blindRuntime.recursive,
       displayOrders: blindRuntime.displayOrders,
       outputPath: blindRuntime.outputPath,
       index: blindIndexRef.current,
@@ -498,6 +622,9 @@ export function useImageCompare(): UseImageCompareReturn {
     setSearchQuery,
     intersectionMode,
     setIntersectionMode,
+    recursiveMode,
+    setRecursiveMode,
+    truncated,
     blind,
     enterBlind,
     exitBlind,

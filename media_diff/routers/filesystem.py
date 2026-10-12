@@ -24,6 +24,7 @@ class BrowseRequest(BaseModel):
 
 class ImagesRequest(BaseModel):
     path: str
+    recursive: bool = False
 
 
 class VideosRequest(BaseModel):
@@ -102,11 +103,11 @@ def list_images_endpoint(req: ImagesRequest):
         raise HTTPException(status_code=403, detail="无权限访问该路径")
 
     try:
-        images = list_images(normalized)
+        images = list_images(normalized, recursive=req.recursive)
     except PermissionError:
         raise HTTPException(status_code=403, detail="无权限访问该路径")
 
-    return {"images": images}
+    return {"images": images, "truncated": len(images) >= MAX_RECURSIVE_ENTRIES}
 
 
 @router.post("/videos")

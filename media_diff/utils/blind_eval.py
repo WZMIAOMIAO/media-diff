@@ -83,11 +83,11 @@ def _names_in_folder(path: str, media: str = "image", recursive: bool = False) -
     mirrored subfolder layout pairs file-for-file). Otherwise they are plain
     file names, matching the non-recursive comparison behaviour.
     """
-    if recursive and media == "video":
-        items = list_videos(path, recursive=True)
-        return {item.get("rel", item["name"]) for item in items}
     lister = _MEDIA_LISTERS.get(media, list_images)
-    return {item["name"] for item in lister(path)}
+    items = lister(path, recursive=recursive)
+    if recursive:
+        return {item.get("rel", item["name"]) for item in items}
+    return {item["name"] for item in items}
 
 
 def common_file_names(
@@ -96,10 +96,8 @@ def common_file_names(
     """Return the sorted intersection of pairing keys across all folders.
 
     Keys are file names by default, or folder-relative paths when ``recursive``
-    is set (video only).
+    is set.
     """
-    if recursive and media != "video":
-        raise BlindEvalError("图片暂不支持递归盲评")
     per_folder = [_names_in_folder(p, media, recursive) for p in paths]
     common = set.intersection(*per_folder) if per_folder else set()
     return sorted(common)
@@ -178,8 +176,8 @@ def setup(
 
     ``media`` selects which file names are intersected (``"image"`` or
     ``"video"``); the rest of the flow is identical for both. When
-    ``recursive`` is set (video only) the pairing keys are folder-relative
-    paths so mirrored subfolder trees align file-for-file.
+    ``recursive`` is set the pairing keys are folder-relative paths so
+    mirrored subfolder trees align file-for-file.
     """
     if len(paths) < 2:
         raise BlindEvalError("盲评模式需要至少2个对比文件夹")

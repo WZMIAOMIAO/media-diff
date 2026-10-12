@@ -81,20 +81,52 @@ def _has_child_dir(path: str) -> bool:
     return False
 
 
-def list_images(path: str) -> list[dict]:
+def _list_media(
+    path: str, extensions: set[str], recursive: bool = False
+) -> list[dict]:
+    """List media files matching ``extensions``.
+
+    Non-recursive (default) returns only the files directly inside ``path``.
+    Recursive walks the tree, skipping hidden entries and never following
+    symlinks, and adds a ``rel`` key (path relative to ``path``, posix
+    separators) used for mirrored pairing. Stops at ``MAX_RECURSIVE_ENTRIES``.
+    """
     base = path
-    images: list[dict] = []
+    items: list[dict] = []
     try:
-        with os.scandir(base) as it:
-            for entry in it:
-                if entry.is_file():
-                    ext = os.path.splitext(entry.name)[1].lower()
-                    if ext in IMAGE_EXTENSIONS:
-                        images.append({"name": entry.name, "path": entry.path})
+        if recursive:
+            for dirpath, dirnames, filenames in os.walk(base):
+                dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+                for name in filenames:
+                    if name.startswith("."):
+                        continue
+                    ext = os.path.splitext(name)[1].lower()
+                    if ext not in extensions:
+                        continue
+                    full = os.path.join(dirpath, name)
+                    rel = os.path.relpath(full, base).replace(os.sep, "/")
+                    items.append({"name": name, "path": full, "rel": rel})
+                    if len(items) >= MAX_RECURSIVE_ENTRIES:
+                        items.sort(key=lambda x: x["rel"].lower())
+                        return items
+        else:
+            with os.scandir(base) as it:
+                for entry in it:
+                    if entry.is_file():
+                        ext = os.path.splitext(entry.name)[1].lower()
+                        if ext in extensions:
+                            items.append({"name": entry.name, "path": entry.path})
     except PermissionError:
         raise
-    images.sort(key=lambda x: x["name"].lower())
-    return images
+    if recursive:
+        items.sort(key=lambda x: x["rel"].lower())
+    else:
+        items.sort(key=lambda x: x["name"].lower())
+    return items
+
+
+def list_images(path: str, recursive: bool = False) -> list[dict]:
+    return _list_media(path, IMAGE_EXTENSIONS, recursive)
 
 
 def list_json_files(path: str) -> list[dict]:
@@ -114,37 +146,4 @@ def list_json_files(path: str) -> list[dict]:
 
 
 def list_videos(path: str, recursive: bool = False) -> list[dict]:
-    base = path
-    videos: list[dict] = []
-    try:
-        if recursive:
-            # Walk the tree but never follow symlinks and skip hidden
-            # entries, so the scan stays inside the selected folder.
-            for dirpath, dirnames, filenames in os.walk(base):
-                dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
-                for name in filenames:
-                    if name.startswith("."):
-                        continue
-                    ext = os.path.splitext(name)[1].lower()
-                    if ext not in VIDEO_EXTENSIONS:
-                        continue
-                    full = os.path.join(dirpath, name)
-                    rel = os.path.relpath(full, base).replace(os.sep, "/")
-                    videos.append({"name": name, "path": full, "rel": rel})
-                    if len(videos) >= MAX_RECURSIVE_ENTRIES:
-                        videos.sort(key=lambda x: x["rel"].lower())
-                        return videos
-        else:
-            with os.scandir(base) as it:
-                for entry in it:
-                    if entry.is_file():
-                        ext = os.path.splitext(entry.name)[1].lower()
-                        if ext in VIDEO_EXTENSIONS:
-                            videos.append({"name": entry.name, "path": entry.path})
-    except PermissionError:
-        raise
-    if recursive:
-        videos.sort(key=lambda x: x["rel"].lower())
-    else:
-        videos.sort(key=lambda x: x["name"].lower())
-    return videos
+    return _list_media(path, VIDEO_EXTENSIONS, recursive)

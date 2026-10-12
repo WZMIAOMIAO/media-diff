@@ -70,20 +70,24 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
     );
   }
 
+  const blindKeyOf = (e: FileEntry) =>
+    blind?.recursive ? e.rel ?? e.name : e.name;
+
   const allWindows: WindowInfo[] = selectedFolders.map((f, i) => {
     if (blind) {
       const name = blind.order[blind.index];
       const order = (name && blind.displayOrders[name]) || selectedFolders.map((_, k) => k);
       const folder = selectedFolders[order[i] ?? i] ?? f;
       const image =
-        (filteredImages.get(folder.path) ?? []).find((e) => e.name === name) ?? null;
+        (filteredImages.get(folder.path) ?? []).find((e) => blindKeyOf(e) === name) ?? null;
       return { index: i, folder, image };
     }
     const idx = currentIndices.get(f.path) ?? 0;
+    const entry = filteredImages.get(f.path)?.[idx];
     return {
       index: i,
       folder: f,
-      image: filteredImages.get(f.path)?.[idx] ?? null,
+      image: entry && !entry.missing ? entry : null,
     };
   });
 

@@ -178,13 +178,20 @@ def test_common_file_names_recursive_uses_rel(tmp_path):
     assert common == ["sub1/v.mp4"]
 
 
-def test_common_file_names_recursive_image_rejected(tmp_path):
+def test_common_file_names_recursive_image(tmp_path):
+    def make_images(root, rels):
+        for rel in rels:
+            f = root / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (8, 8), (1, 2, 3)).save(f)
+
     a = tmp_path / "A"
     b = tmp_path / "B"
-    make_folder(a, ["x.png"])
-    make_folder(b, ["x.png"])
-    with pytest.raises(blind_eval.BlindEvalError):
-        blind_eval.common_file_names([str(a), str(b)], media="image", recursive=True)
+    # same relative path -> common; same basename at different paths -> not common
+    make_images(a, ["sub1/x.png", "sub2/x.png", "solo_a.png"])
+    make_images(b, ["sub1/x.png", "sub3/x.png", "solo_b.png"])
+    common = blind_eval.common_file_names([str(a), str(b)], media="image", recursive=True)
+    assert common == ["sub1/x.png"]
 
 
 def test_api_setup_recursive_video(client, tmp_path):

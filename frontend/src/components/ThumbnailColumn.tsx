@@ -95,7 +95,7 @@ function ThumbnailColumn({
               const idx = start + i;
               return (
                 <div
-                  key={img.path}
+                  key={idx}
                   style={{
                     position: 'absolute',
                     top: idx * ITEM_HEIGHT,
