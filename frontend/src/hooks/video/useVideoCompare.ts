@@ -15,7 +15,8 @@ export interface UseVideoCompareReturn {
   filteredVideos: Map<string, VideoEntry[]>;
   currentVideoIndices: Map<string, number>;
   setCurrentVideoIndex: (folderPath: string, idx: number) => void;
-  nextVideo: () => void;
+  /** Advance every window to the next video; returns true if it moved. */
+  nextVideo: () => boolean;
   prevVideo: () => void;
   alignByName: (folderPath: string, videoName: string) => void;
   alignByIndex: (idx: number) => void;
@@ -388,14 +389,14 @@ export function useVideoCompare(): UseVideoCompareReturn {
     [applyBlindIndex, forceUpdate],
   );
 
-  const nextVideo = useCallback(() => {
+  const nextVideo = useCallback((): boolean => {
     if (blindRef.current) {
       const total = blindRef.current.order.length;
-      if (blindIndexRef.current >= total - 1) return;
+      if (blindIndexRef.current >= total - 1) return false;
       blindIndexRef.current += 1;
       applyBlindIndex();
       forceUpdate();
-      return;
+      return true;
     }
     let changed = false;
     const next = new Map(indicesRef.current);
@@ -409,9 +410,10 @@ export function useVideoCompare(): UseVideoCompareReturn {
         changed = true;
       }
     }
-    if (!changed) return;
+    if (!changed) return false;
     indicesRef.current = next;
     forceUpdate();
+    return true;
   }, [applyBlindIndex, forceUpdate]);
 
   const prevVideo = useCallback(() => {

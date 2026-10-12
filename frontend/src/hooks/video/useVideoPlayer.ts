@@ -7,11 +7,14 @@ export interface VideoPlayerApi {
   currentFrame: number;
   speed: number;
   loop: boolean;
+  autoNext: boolean;
   muted: boolean;
   baseFrameCount: number;
   registerVideoEl: (folderPath: string, el: HTMLVideoElement | null) => void;
   setSpeed: (s: number) => void;
   setLoop: (b: boolean) => void;
+  /** Toggle auto-advance to the next video on end (turns loop off when on). */
+  setAutoNext: (b: boolean) => void;
   setMuted: (m: boolean) => void;
   togglePlay: () => void;
   play: () => void;
@@ -38,15 +41,18 @@ interface PlayerDeps {
   selectedFolders: SelectedFolder[];
   currentVideos: Map<string, VideoEntry | null>;
   videoInfos: Map<string, VideoInfo>;
+  /** Advance to the next video; returns true if it actually moved. */
+  onAutoNext?: () => boolean;
 }
 
 export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
-  const { selectedFolders, currentVideos, videoInfos } = deps;
+  const { selectedFolders, currentVideos, videoInfos, onAutoNext } = deps;
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrameState] = useState(1);
   const [speed, setSpeedState] = useState(1);
   const [loop, setLoopState] = useState(true);
+  const [autoNext, setAutoNextState] = useState(false);
   const [muted, setMutedState] = useState(true);
 
   const isPlayingRef = useRef(isPlaying);
@@ -55,6 +61,13 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
   speedRef.current = speed;
   const loopRef = useRef(loop);
   loopRef.current = loop;
+  const autoNextRef = useRef(autoNext);
+  autoNextRef.current = autoNext;
+  const onAutoNextRef = useRef(onAutoNext);
+  onAutoNextRef.current = onAutoNext;
+  // Set when a video ends with auto-next on; the switch effect below reads it
+  // to start playing the newly selected video instead of pausing.
+  const autoPlayPendingRef = useRef(false);
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
   const currentFrameRef = useRef(currentFrame);
@@ -260,11 +273,17 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
           el.currentTime = 0;
           void el.play().catch(() => {});
         }
-      } else {
-        setIsPlaying(false);
-        isPlayingRef.current = false;
-        for (const el of videoRefs.current.values()) el.pause();
+        return;
       }
+      // Auto-advance: only if it actually moves to another video, otherwise
+      // fall through to a normal pause (end of the list).
+      if (autoNextRef.current && onAutoNextRef.current?.()) {
+        autoPlayPendingRef.current = true;
+        return;
+      }
+      setIsPlaying(false);
+      isPlayingRef.current = false;
+      for (const el of videoRefs.current.values()) el.pause();
     },
     [selectedFolders, currentVideos],
   );
@@ -277,9 +296,23 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
     }
   }, []);
 
+  // Loop and auto-next are mutually exclusive: the last one switched on wins.
   const setLoop = useCallback((b: boolean) => {
     setLoopState(b);
     loopRef.current = b;
+    if (b) {
+      setAutoNextState(false);
+      autoNextRef.current = false;
+    }
+  }, []);
+
+  const setAutoNext = useCallback((b: boolean) => {
+    setAutoNextState(b);
+    autoNextRef.current = b;
+    if (b) {
+      setLoopState(false);
+      loopRef.current = false;
+    }
   }, []);
 
   const setMuted = useCallback((m: boolean) => {
@@ -290,16 +323,20 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
     }
   }, []);
 
-  // when current video changes (switch), reset to frame 1 and pause
+  // when current video changes (switch), reset to frame 1. Normally pause;
+  // when the switch was triggered by auto-next, start playing instead.
   const videosKey = selectedFolders
     .map((f) => `${f.path}:${currentVideos.get(f.path)?.path ?? ''}`)
     .join('|');
   useEffect(() => {
+    const autoPlay = autoPlayPendingRef.current;
+    autoPlayPendingRef.current = false;
     setIsPlaying(false);
     isPlayingRef.current = false;
     setCurrentFrame(1);
     seekAllVideos(1);
     for (const el of videoRefs.current.values()) el.pause();
+    if (autoPlay) play();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videosKey]);
 
@@ -315,11 +352,13 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
     currentFrame,
     speed,
     loop,
+    autoNext,
     muted,
     baseFrameCount,
     registerVideoEl,
     setSpeed,
     setLoop,
+    setAutoNext,
     setMuted,
     togglePlay,
     play,

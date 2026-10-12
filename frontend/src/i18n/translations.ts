@@ -96,6 +96,7 @@ export const zh: Dict = {
   'player.prevFrame': '上一帧 (a)',
   'player.nextFrame': '下一帧 (d)',
   'player.loop': '循环',
+  'player.autoNext': '自动下一个',
   'player.unmute': '开启声音',
   'player.mute': '关闭声音',
 
@@ -304,6 +305,7 @@ export const en: Dict = {
   'player.prevFrame': 'Previous frame (a)',
   'player.nextFrame': 'Next frame (d)',
   'player.loop': 'Loop',
+  'player.autoNext': 'Auto next',
   'player.unmute': 'Unmute',
   'player.mute': 'Mute',
 

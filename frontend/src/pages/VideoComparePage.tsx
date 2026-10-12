@@ -21,6 +21,7 @@ export default function VideoComparePage() {
     selectedFolders: compare.selectedFolders,
     currentVideos: compare.currentVideos,
     videoInfos: compare.videoInfos,
+    onAutoNext: compare.nextVideo,
   });
   const [histogramEnabled, setHistogramEnabled] = useState(false);
   const [colorPickerEnabled, setColorPickerEnabled] = useState(false);

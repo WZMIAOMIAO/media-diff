@@ -47,7 +47,7 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
 
 function PlayerBar({ player, mainFps }: PlayerBarProps) {
   const { t } = useI18n();
-  const { isPlaying, currentFrame, baseFrameCount, speed, loop, muted } = player;
+  const { isPlaying, currentFrame, baseFrameCount, speed, loop, autoNext, muted } = player;
   const max = Math.max(1, baseFrameCount);
 
   const onProgressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,6 +125,15 @@ function PlayerBar({ player, mainFps }: PlayerBarProps) {
 
       <div className="shrink-0">
         <Toggle checked={loop} onChange={player.setLoop} color="#4a9eff" label={t('player.loop')} />
+      </div>
+
+      <div className="shrink-0">
+        <Toggle
+          checked={autoNext}
+          onChange={player.setAutoNext}
+          color="#4a9eff"
+          label={t('player.autoNext')}
+        />
       </div>
 
       <button
