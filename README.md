@@ -12,6 +12,9 @@
 
 ![图像对比模式](assets/screenshots/image-compare.jpg)
 
+视频对比模式（多窗口逐帧对比、倍数播放、自动播放下一个视频、RGB 直方图叠加、窗口水印、盲评等）：
+![视频对比模式](assets/screenshots/video-compare.png)
+
 ## 安装
 
 > 目前尚未发布到 PyPI，请从 git 仓库或本地源码安装。
