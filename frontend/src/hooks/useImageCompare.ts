@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listImages, voteBlindEval, type FileEntry } from '../api';
-import type { BlindEvalApi, BlindSetupResult, SelectedFolder } from '../types';
+import type {
+  AnnotationApi,
+  AnnotationEntry,
+  BlindEvalApi,
+  BlindSetupResult,
+  SelectedFolder,
+} from '../types';
+import { useAnnotation, buildPathGroups } from './useAnnotation';
 import { t } from '../i18n/store';
 
 export type { BlindEvalApi } from '../types';
+
+const IMAGE_COMMON_TEXTS_KEY = 'image_viewer_common_texts';
 
 interface BlindRuntime {
   aliases: Record<string, string>;
@@ -63,6 +72,11 @@ export interface UseImageCompareReturn {
   blind: BlindEvalApi | null;
   enterBlind: (result: BlindSetupResult) => void;
   exitBlind: () => void;
+
+  // 标注模式
+  annotation: AnnotationApi | null;
+  enterAnnotation: (outputPath: string, entries: AnnotationEntry[]) => void;
+  exitAnnotation: () => void;
 }
 
 function getPathName(path: string): string {
@@ -225,6 +239,28 @@ export function useImageCompare(): UseImageCompareReturn {
   // 同步最新 filteredImages 给回调使用
   const filteredImagesRef = useRef(filteredImages);
   filteredImagesRef.current = filteredImages;
+
+  // 标注：当前图组（按窗口顺序）的图片绝对路径。缺失占位（递归模式）不参与。
+  const annPaths: string[] = [];
+  for (const f of foldersRef.current) {
+    const list = filteredImages.get(f.path) ?? [];
+    if (list.length === 0) continue;
+    const idx = Math.min(Math.max(indicesRef.current.get(f.path) ?? 0, 0), list.length - 1);
+    const item = list[idx];
+    if (item && !item.missing && item.path) annPaths.push(item.path);
+  }
+  const {
+    annotation,
+    enter: enterAnnotation,
+    exit: exitAnnotation,
+  } = useAnnotation({
+    media: 'image',
+    currentPaths: annPaths,
+    getGroups: () =>
+      buildPathGroups(foldersRef.current, filteredImagesRef.current),
+    commonTextsKey: IMAGE_COMMON_TEXTS_KEY,
+    forceUpdate,
+  });
 
   // 将每个文件夹的索引对齐到当前盲评组编号。
   const applyBlindIndex = useCallback(() => {
@@ -620,5 +656,8 @@ export function useImageCompare(): UseImageCompareReturn {
     blind,
     enterBlind,
     exitBlind,
+    annotation,
+    enterAnnotation,
+    exitAnnotation,
   };
 }

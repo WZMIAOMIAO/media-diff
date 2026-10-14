@@ -75,4 +75,42 @@ export interface BlindEvalApi {
   vote: (name: string, alias: string | null) => Promise<void>;
 }
 
+/** One annotation record: compared media paths (window order) + question/answer. */
+export interface AnnotationEntry {
+  /** Image mode compared paths. */
+  image?: string[];
+  /** Video mode compared paths. */
+  video?: string[];
+  question: string;
+  answer: string;
+}
 
+export type AnnotationMedia = 'image' | 'video';
+
+export interface AnnotationCheckResult {
+  /** Resolved JSON file path (directory input gains the default filename). */
+  path: string;
+  exists: boolean;
+  writable: boolean;
+}
+
+/** Runtime annotation state exposed by the compare hooks. */
+export interface AnnotationApi {
+  /** Which media this annotation session is for. */
+  media: AnnotationMedia;
+  outputPath: string;
+  /** Number of media groups currently navigable. */
+  total: number;
+  /** Of those, how many already have an annotation entry. */
+  annotatedCount: number;
+  /** Whether the current group has been annotated. */
+  isAnnotated: boolean;
+  question: string;
+  setQuestion: (question: string) => void;
+  result: string;
+  setResult: (result: string) => void;
+  commonTexts: string[];
+  addCommonText: (text: string) => void;
+  removeCommonText: (text: string) => void;
+  submit: () => Promise<void>;
+}

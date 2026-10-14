@@ -14,6 +14,8 @@ interface VideoTopNavProps {
   colorPickerDisabled: boolean;
   onColorPickerToggle: () => void;
   onWatermarkClick: () => void;
+  annotationActive: boolean;
+  onAnnotationToggle: () => void;
   blindActive: boolean;
   onBlindToggle: () => void;
 }
@@ -25,6 +27,8 @@ function VideoTopNav({
   colorPickerDisabled,
   onColorPickerToggle,
   onWatermarkClick,
+  annotationActive,
+  onAnnotationToggle,
   blindActive,
   onBlindToggle,
 }: VideoTopNavProps) {
@@ -52,6 +56,12 @@ function VideoTopNav({
             onChange={onHistogramToggle}
             color="#4a9eff"
             label={t('nav.histogram')}
+          />
+          <Toggle
+            checked={annotationActive}
+            onChange={onAnnotationToggle}
+            color="#4a9eff"
+            label={t('nav.annotation')}
           />
           <Toggle
             checked={blindActive}

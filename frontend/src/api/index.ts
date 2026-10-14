@@ -1,4 +1,11 @@
-import type { BlindSetupParams, BlindSetupResult, HistogramData } from '../types';
+import type {
+  AnnotationCheckResult,
+  AnnotationEntry,
+  AnnotationMedia,
+  BlindSetupParams,
+  BlindSetupResult,
+  HistogramData,
+} from '../types';
 import { t } from '../i18n/store';
 
 const API_BASE = '/api';
@@ -258,6 +265,52 @@ export async function saveBlindEval(
   const res = await postBlind<{ data: Record<string, unknown> }>('save', {
     output_path: outputPath,
     data,
+  });
+  return res.data;
+}
+
+// ---- 标注模式 ----
+
+async function postAnnotation<T>(endpoint: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}/annotations/${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(payload?.detail || t('api.annotationFailed'));
+  }
+  return payload as T;
+}
+
+export function checkAnnotationPath(
+  path: string,
+  media: AnnotationMedia = 'image',
+): Promise<AnnotationCheckResult> {
+  return postAnnotation<AnnotationCheckResult>('check-path', { path, media });
+}
+
+export async function loadAnnotations(
+  savePath: string,
+  media: AnnotationMedia = 'image',
+): Promise<AnnotationEntry[]> {
+  const res = await postAnnotation<{ data: AnnotationEntry[] }>('load', {
+    save_path: savePath,
+    media,
+  });
+  return res.data;
+}
+
+export async function saveAnnotations(
+  savePath: string,
+  annotations: AnnotationEntry[],
+  media: AnnotationMedia = 'image',
+): Promise<AnnotationEntry[]> {
+  const res = await postAnnotation<{ data: AnnotationEntry[] }>('save', {
+    save_path: savePath,
+    annotations,
+    media,
   });
   return res.data;
 }

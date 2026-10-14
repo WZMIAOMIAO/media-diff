@@ -13,6 +13,8 @@ interface TopNavProps {
   colorPickerEnabled: boolean;
   onColorPickerToggle: () => void;
   onWatermarkClick: () => void;
+  annotationActive: boolean;
+  onAnnotationToggle: () => void;
   blindActive: boolean;
   onBlindToggle: () => void;
 }
@@ -23,11 +25,12 @@ function TopNav({
   colorPickerEnabled,
   onColorPickerToggle,
   onWatermarkClick,
+  annotationActive,
+  onAnnotationToggle,
   blindActive,
   onBlindToggle,
 }: TopNavProps) {
   const { t } = useI18n();
-  const [annotation, setAnnotation] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
   return (
@@ -48,15 +51,8 @@ function TopNav({
           </button>
           <Toggle checked={histogramEnabled} onChange={onHistogramToggle} color="#4a9eff" label={t('nav.histogram')} />
           <Toggle
-            checked={annotation}
-            onChange={() => {
-              if (blindActive) {
-                alert(t('nav.alert.annotationBlindConflict'));
-                return;
-              }
-              setAnnotation(false);
-              alert(t('nav.alert.comingSoon'));
-            }}
+            checked={annotationActive}
+            onChange={onAnnotationToggle}
             color="#4a9eff"
             label={t('nav.annotation')}
           />

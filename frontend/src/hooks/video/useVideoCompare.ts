@@ -2,8 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { voteBlindEval } from '../../api';
 import { getVideoInfo, listVideos } from '../../api/video';
 import type { VideoEntry, VideoInfo } from '../../types/video';
-import type { BlindEvalApi, BlindSetupResult, SelectedFolder } from '../../types';
+import type {
+  AnnotationApi,
+  AnnotationEntry,
+  BlindEvalApi,
+  BlindSetupResult,
+  SelectedFolder,
+} from '../../types';
+import { useAnnotation, buildPathGroups } from '../useAnnotation';
 import { t } from '../../i18n/store';
+
+const VIDEO_COMMON_TEXTS_KEY = 'video_viewer_common_texts';
 
 export interface UseVideoCompareReturn {
   selectedFolders: SelectedFolder[];
@@ -37,6 +46,10 @@ export interface UseVideoCompareReturn {
   blind: BlindEvalApi | null;
   enterBlind: (result: BlindSetupResult) => void;
   exitBlind: () => void;
+
+  annotation: AnnotationApi | null;
+  enterAnnotation: (outputPath: string, entries: AnnotationEntry[]) => void;
+  exitAnnotation: () => void;
 }
 
 interface BlindRuntime {
@@ -226,6 +239,28 @@ export function useVideoCompare(): UseVideoCompareReturn {
 
   const filteredVideosRef = useRef(filteredVideos);
   filteredVideosRef.current = filteredVideos;
+
+  // 标注：当前图组（按窗口顺序）的视频绝对路径。缺失占位（递归模式）不参与。
+  const annPaths: string[] = [];
+  for (const f of foldersRef.current) {
+    const list = filteredVideosRef.current.get(f.path) ?? [];
+    if (list.length === 0) continue;
+    const idx = Math.min(Math.max(indicesRef.current.get(f.path) ?? 0, 0), list.length - 1);
+    const item = list[idx];
+    if (item && !item.missing && item.path) annPaths.push(item.path);
+  }
+  const {
+    annotation,
+    enter: enterAnnotation,
+    exit: exitAnnotation,
+  } = useAnnotation({
+    media: 'video',
+    currentPaths: annPaths,
+    getGroups: () =>
+      buildPathGroups(foldersRef.current, filteredVideosRef.current),
+    commonTextsKey: VIDEO_COMMON_TEXTS_KEY,
+    forceUpdate,
+  });
 
   // 将每个文件夹的索引对齐到当前盲评组编号。
   const applyBlindIndex = useCallback(() => {
@@ -705,5 +740,8 @@ export function useVideoCompare(): UseVideoCompareReturn {
     blind,
     enterBlind,
     exitBlind,
+    annotation,
+    enterAnnotation,
+    exitAnnotation,
   };
 }
