@@ -39,6 +39,28 @@ export function useWatermark(storageKey: string) {
 
   const clearTexts = useCallback(() => setTextsState({}), []);
 
+  /**
+   * Move the text stored at window index ``from`` to ``to``, shifting the
+   * in-between entries the same way the folder order is moved. Keeps the
+   * watermark text attached to its folder when the compare columns/windows are
+   * reordered.
+   */
+  const reorder = useCallback((from: number, to: number) => {
+    if (from === to) return;
+    setTextsState((prev) => {
+      const next: Record<number, string> = {};
+      for (const [key, value] of Object.entries(prev)) {
+        const k = Number(key);
+        let nk = k;
+        if (k === from) nk = to;
+        else if (from < to && k > from && k <= to) nk = k - 1;
+        else if (from > to && k >= to && k < from) nk = k + 1;
+        next[nk] = value;
+      }
+      return next;
+    });
+  }, []);
+
   const fillFolderNames = useCallback((folders: SelectedFolder[]) => {
     const next: Record<number, string> = {};
     folders.forEach((folder, i) => {
@@ -62,5 +84,5 @@ export function useWatermark(storageKey: string) {
     return map;
   }, [texts, style]);
 
-  return { style, setStyle, texts, setText, clearTexts, fillFolderNames, configs };
+  return { style, setStyle, texts, setText, clearTexts, fillFolderNames, reorder, configs };
 }

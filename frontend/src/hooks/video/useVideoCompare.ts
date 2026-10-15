@@ -18,6 +18,8 @@ export interface UseVideoCompareReturn {
   selectedFolders: SelectedFolder[];
   addFolder: (path: string) => Promise<void>;
   removeFolder: (path: string) => void;
+  /** Reorder selected folders; columns/windows follow. Blocked in annotation/blind. */
+  moveFolder: (from: number, to: number) => boolean;
   clearFolders: () => void;
 
   videosPerFolder: Map<string, VideoEntry[]>;
@@ -389,6 +391,29 @@ export function useVideoCompare(): UseVideoCompareReturn {
     [forceUpdate],
   );
 
+  const moveFolder = useCallback(
+    (from: number, to: number): boolean => {
+      if (blindRef.current || annotation) return false;
+      const folders = foldersRef.current;
+      if (
+        from === to ||
+        from < 0 ||
+        to < 0 ||
+        from >= folders.length ||
+        to >= folders.length
+      ) {
+        return false;
+      }
+      const next = folders.slice();
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      foldersRef.current = next;
+      forceUpdate();
+      return true;
+    },
+    [annotation, forceUpdate],
+  );
+
   const clearFolders = useCallback(() => {
     if (blindRef.current) {
       alert(t('blind.locked.clear'));
@@ -718,6 +743,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
     selectedFolders,
     addFolder,
     removeFolder,
+    moveFolder,
     clearFolders,
     videosPerFolder,
     filteredVideos,

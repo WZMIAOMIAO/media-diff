@@ -105,6 +105,10 @@ export default function VideoComparePage() {
     setAnnotationSetupOpen(true);
   };
 
+  const handleMoveFolder = (from: number, to: number) => {
+    if (compare.moveFolder(from, to)) watermark.reorder(from, to);
+  };
+
   return (
     <div className="h-screen w-full flex flex-col overflow-hidden bg-[#1e1e1e] text-[#e0e0e0]">
       <VideoTopNav
@@ -120,7 +124,7 @@ export default function VideoComparePage() {
         onBlindToggle={handleBlindToggle}
       />
       <div className="flex-1 flex min-h-0">
-        <VideoSidebar compare={compare} />
+        <VideoSidebar compare={compare} onMoveFolder={handleMoveFolder} />
         <VideoThumbnailPanel compare={compare} />
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">
           <VideoCompareArea

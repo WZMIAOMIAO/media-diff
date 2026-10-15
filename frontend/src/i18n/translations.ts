@@ -41,6 +41,8 @@ export const zh: Dict = {
   'sidebar.folders': '文件夹',
   'sidebar.selectedDirs': '已选对比目录',
   'sidebar.none': '暂无',
+  'sidebar.dragReorder': '拖动调整顺序',
+  'sidebar.dragReorderLocked': '标注/盲评模式下不可拖动',
 
   // folder tree
   'tree.menu.add': '添加到多目录对比',
@@ -286,6 +288,8 @@ export const en: Dict = {
   'sidebar.folders': 'Folders',
   'sidebar.selectedDirs': 'Selected folders',
   'sidebar.none': 'None',
+  'sidebar.dragReorder': 'Drag to reorder',
+  'sidebar.dragReorderLocked': 'Reordering is disabled in annotation/blind mode',
 
   // folder tree
   'tree.menu.add': 'Add to compare',

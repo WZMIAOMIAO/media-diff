@@ -45,12 +45,11 @@ function BlindEvalResultDialog({ blind, onClose }: BlindEvalResultDialogProps) {
         </div>
         <div className="flex-1 min-h-0 overflow-auto p-3 flex flex-col gap-2">
           {rows.map(({ path, alias, win, tie, loss }) => (
-            <div key={path} className="flex items-center gap-2 text-sm">
+            <div key={path} className="flex items-center gap-2 text-sm" title={path}>
               <span className="shrink-0 text-[#888888]">{alias}</span>
               <span
                 className="flex-1 min-w-0 truncate text-right"
                 style={{ direction: 'rtl' }}
-                title={path}
               >
                 <span dir="ltr" className="text-[#c0c0c0]">
                   {path}

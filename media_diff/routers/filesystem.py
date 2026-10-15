@@ -36,7 +36,11 @@ def _resolve_path(path: str) -> str:
     # Enforce the access root before touching the filesystem so an outside path
     # is always rejected (and its existence is never leaked).
     ensure_within_access_root(path)
-    normalized = os.path.normpath(path)
+    # Always resolve to an absolute path so every path handed back to the client
+    # (tree nodes, listed media, ...) is a full absolute path even when the user
+    # typed a relative one. Otherwise relative roots would produce relative
+    # child paths that then flow into compared folders / watermark / results.
+    normalized = os.path.abspath(path)
     if not os.path.exists(normalized):
         raise HTTPException(status_code=404, detail="路径不存在")
     if not os.path.isdir(normalized):

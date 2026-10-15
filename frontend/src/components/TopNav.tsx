@@ -6,6 +6,7 @@ import HelpButton from './HelpButton';
 import ShortcutHelpDialog from './ShortcutHelpDialog';
 import LanguageSwitcher from './LanguageSwitcher';
 import GitHubButton from './GitHubButton';
+import logo from '../assets/logo.png';
 import { useI18n } from '../i18n';
 
 interface TopNavProps {
@@ -38,7 +39,7 @@ function TopNav({
     <header className="h-12 shrink-0 flex items-center justify-between px-3 bg-[#252525] border-b border-[#3c3c3c]">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded bg-[#4a9eff]" />
+          <img src={logo} alt="" className="w-6 h-6 rounded" />
           <span className="text-base text-[#e0e0e0]">{t('brand.name')}</span>
           <span
             className="text-xs px-1.5 py-0.5 rounded"

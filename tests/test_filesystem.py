@@ -24,6 +24,22 @@ def test_browse_missing_path(client, tmp_path):
     assert res.status_code == 404
 
 
+def test_browse_relative_path_returns_absolute(client, tmp_path, monkeypatch):
+    import os
+
+    root = tmp_path / "data"
+    (root / "sub").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    res = client.post("/api/filesystem/browse", json={"path": "data"})
+    assert res.status_code == 200
+    body = res.json()
+    # A relative input must be resolved to a full absolute path so downstream
+    # nodes (and compared folders) never carry an incomplete relative path.
+    assert os.path.isabs(body["path"])
+    assert body["path"] == os.path.abspath(root)
+    assert all(os.path.isabs(s["path"]) for s in body["subdirs"])
+
+
 def test_list_images_endpoint(client, image_dir):
     res = client.post("/api/filesystem/images", json={"path": str(image_dir)})
     assert res.status_code == 200

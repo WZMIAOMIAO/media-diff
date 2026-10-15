@@ -93,6 +93,10 @@ export default function ImageComparePage() {
     setAnnotationSetupOpen(true);
   };
 
+  const handleMoveFolder = (from: number, to: number) => {
+    if (compare.moveFolder(from, to)) watermark.reorder(from, to);
+  };
+
   return (
     <div className="h-screen w-full flex flex-col overflow-hidden bg-[#1e1e1e] text-[#e0e0e0]">
       <TopNav
@@ -107,7 +111,7 @@ export default function ImageComparePage() {
         onBlindToggle={handleBlindToggle}
       />
       <div className="flex-1 flex min-h-0">
-        <Sidebar compare={compare} />
+        <Sidebar compare={compare} onMoveFolder={handleMoveFolder} />
         <ThumbnailPanel compare={compare} />
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">
           <ImageCompareArea

@@ -1,6 +1,7 @@
 import { useState, type MouseEvent as ReactMouseEvent } from 'react';
 import VideoFolderInput from './VideoFolderInput';
 import VideoFolderTree from './VideoFolderTree';
+import SelectedFoldersList from '../SelectedFoldersList';
 import { useVideoFolderTree } from '../../hooks/video/useVideoFolderTree';
 import { VIDEO_TREE_KEY } from '../../utils/treeStorage';
 import { useI18n } from '../../i18n';
@@ -8,13 +9,14 @@ import type { UseVideoCompareReturn } from '../../hooks/video/useVideoCompare';
 
 interface VideoSidebarProps {
   compare: UseVideoCompareReturn;
+  onMoveFolder: (from: number, to: number) => void;
 }
 
 const MIN_W = 180;
 const MAX_W = 500;
 const DEFAULT_W = 250;
 
-function VideoSidebar({ compare }: VideoSidebarProps) {
+function VideoSidebar({ compare, onMoveFolder }: VideoSidebarProps) {
   const { t } = useI18n();
   const tree = useVideoFolderTree(VIDEO_TREE_KEY);
   const [width, setWidth] = useState(DEFAULT_W);
@@ -69,52 +71,13 @@ function VideoSidebar({ compare }: VideoSidebarProps) {
         <span className="text-sm text-[#e0e0e0]">{t('sidebar.folders')}</span>
       </div>
       <VideoFolderInput onAddRoot={tree.addRoot} />
-      <div className="shrink-0 border-b border-[#3c3c3c] max-h-[40%] flex flex-col min-h-0">
-        <div className="px-2 py-1 text-xs text-[#888888] border-b border-[#3c3c3c]">
-          {t('sidebar.selectedDirs')}
-        </div>
-        <div className="flex-1 min-h-0 overflow-auto">
-          {compare.selectedFolders.length === 0 ? (
-            <div className="px-2 py-1 text-xs text-[#666666]">{t('sidebar.none')}</div>
-          ) : (
-            compare.selectedFolders.map((f) => (
-              <div
-                key={f.path}
-                className="flex items-center gap-1 px-2 py-1 hover:bg-[#2b2b2b]"
-              >
-                <div
-                  className="flex-1 min-w-0 truncate text-right"
-                  style={{ direction: 'rtl' }}
-                  title={f.path}
-                >
-                  <span dir="ltr" className="text-xs text-[#c0c0c0]">
-                    {f.path}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => compare.removeFolder(f.path)}
-                  title={t('common.remove')}
-                  className="shrink-0 text-[#888888] hover:text-[#ef4444] text-base leading-none px-1"
-                >
-                  ×
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-        {compare.selectedFolders.length > 0 && (
-          <div className="px-2 py-1 border-t border-[#3c3c3c]">
-            <button
-              type="button"
-              onClick={() => compare.clearFolders()}
-              className="w-full px-2 py-1 text-xs bg-[#333333] border border-[#3c3c3c] rounded hover:border-[#555555]"
-            >
-              {t('common.clear')}
-            </button>
-          </div>
-        )}
-      </div>
+      <SelectedFoldersList
+        folders={compare.selectedFolders}
+        onRemove={compare.removeFolder}
+        onClear={compare.clearFolders}
+        onMove={onMoveFolder}
+        locked={!!compare.blind || !!compare.annotation}
+      />
       <VideoFolderTree
         tree={tree}
         onAddToCompare={compare.addFolder}
