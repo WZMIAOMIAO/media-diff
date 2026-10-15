@@ -555,7 +555,7 @@ export default function VideoWindow({
             onEnded={() => player.onVideoEnded(folderPath)}
             playsInline
             muted={muted || !isMainVideo}
-            className="max-w-full max-h-full object-contain"
+            className="absolute inset-0 w-full h-full object-contain"
             style={{ display: isPlaying ? 'block' : 'none' }}
           />
         )}

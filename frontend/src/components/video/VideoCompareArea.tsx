@@ -200,7 +200,7 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
     ) : (
       <div className="flex-1 min-h-0 flex gap-px bg-[#3c3c3c]">
         {selectedFolders.map((_, i) => (
-          <div key={i} className="flex-1 min-w-0">
+          <div key={i} className="flex-1 min-w-0 min-h-0">
             {renderWindow(i)}
           </div>
         ))}
@@ -208,7 +208,7 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
     );
 
   return (
-    <main className="flex-1 min-w-0 flex flex-col">
+    <main className="flex-1 min-w-0 min-h-0 flex flex-col">
       {windowsArea}
       <PlayerBar player={player} mainFps={mainFps} />
     </main>
