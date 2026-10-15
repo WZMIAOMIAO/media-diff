@@ -30,7 +30,7 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
   const { t } = useI18n();
   const sharedZoom = useSharedZoom();
   const { zoomByAt } = sharedZoom;
-  const { selectedFolders, filteredVideos, currentVideos, videoInfos, nextVideo, prevVideo, blind } = compare;
+  const { selectedFolders, filteredVideos, currentVideos, currentVideoIndices, videoInfos, nextVideo, prevVideo, blind } = compare;
   const [samplePos, setSamplePos] = useState<SamplePos | null>(null);
 
   const handleSample = useCallback((pos: SamplePos | null) => {
@@ -153,6 +153,10 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
 
   const renderWindow = (i: number) => {
     const w = allWindows[i];
+    const idx = blind ? blind.index : currentVideoIndices.get(w.folderPath) ?? 0;
+    const totalVideos = blind
+      ? blind.total
+      : filteredVideos.get(w.folderPath)?.length ?? 0;
     return (
       <VideoWindow
         // Key by visual position, not folder path: in blind mode the folder
@@ -163,6 +167,8 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
         folderPath={w.folderPath}
         video={w.video}
         videoInfo={videoInfos.get(w.folderPath)}
+        videoIndex={idx}
+        totalVideos={totalVideos}
         player={player}
         sharedZoom={sharedZoom}
         histogramEnabled={histogramEnabled}

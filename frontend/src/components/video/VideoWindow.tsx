@@ -25,6 +25,8 @@ interface VideoWindowProps {
   folderPath: string;
   video: VideoEntry | null;
   videoInfo: VideoInfo | undefined;
+  videoIndex: number;
+  totalVideos: number;
   player: VideoPlayerApi;
   sharedZoom: SharedZoomApi;
   histogramEnabled: boolean;
@@ -66,6 +68,8 @@ export default function VideoWindow({
   folderPath,
   video,
   videoInfo,
+  videoIndex,
+  totalVideos,
   player,
   sharedZoom,
   histogramEnabled,
@@ -436,7 +440,6 @@ export default function VideoWindow({
       : 0;
   const fitPercent = fitRatio > 0 ? Math.round(fitRatio * zoom * 100) : Math.round(zoom * 100);
   const cursor = canDrag ? (dragRef.current ? 'grabbing' : 'grab') : 'default';
-  const frameCount = videoInfo?.frame_count ?? 0;
   const mainVideoPath = allWindows.find((w) => w.video)?.video?.path ?? null;
   const isMainVideo = video != null && video.path === mainVideoPath;
 
@@ -602,9 +605,6 @@ export default function VideoWindow({
                     />
                   </div>
                 )}
-                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-xs text-[#888888]">
-                  {effFrame}/{frameCount || effFrame}
-                </span>
                 {!blindVote && (
                   <span className="absolute bottom-1 right-1 text-xs text-[#888888]">{fitPercent}%</span>
                 )}
@@ -613,6 +613,12 @@ export default function VideoWindow({
               <span className="text-sm text-[#888888]">{t('window.frameExtracting')}</span>
             )}
           </>
+        )}
+
+        {video && totalVideos > 0 && (
+          <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-xs text-[#888888]">
+            {videoIndex + 1}/{totalVideos}
+          </span>
         )}
 
         {needsTranscode && !transcodeDone && (
