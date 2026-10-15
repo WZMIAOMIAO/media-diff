@@ -50,7 +50,9 @@ export async function listVideos(
 // ---- video info ----
 
 export async function getVideoInfo(path: string): Promise<VideoInfo> {
-  const res = await fetch(`${API_BASE}/videos/info?path=${encodeURIComponent(path)}`);
+  const res = await fetch(`${API_BASE}/videos/info?path=${encodeURIComponent(path)}`, {
+    cache: 'no-store',
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || t('api.videoInfoFailed'));
@@ -60,8 +62,11 @@ export async function getVideoInfo(path: string): Promise<VideoInfo> {
 
 // ---- stream url ----
 
-export function getVideoStreamUrl(path: string): string {
-  return `${API_BASE}/videos/stream?path=${encodeURIComponent(path)}`;
+export function getVideoStreamUrl(path: string, version?: string | number): string {
+  const base = `${API_BASE}/videos/stream?path=${encodeURIComponent(path)}`;
+  return version !== undefined && version !== ''
+    ? `${base}&v=${encodeURIComponent(String(version))}`
+    : base;
 }
 
 // ---- transcode (browser-unsupported codecs) ----

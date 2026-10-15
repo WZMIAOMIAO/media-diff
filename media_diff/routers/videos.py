@@ -2,7 +2,7 @@ import logging
 import os
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from media_diff.config import THUMBNAIL_DEFAULT_SIZE, VIDEO_EXTENSIONS
 from media_diff.utils import pool
@@ -23,6 +23,12 @@ from media_diff.utils.videos import (
 router = APIRouter(prefix="/api/videos", tags=["videos"])
 
 _NATIVE_EXTS = {".mp4", ".webm"}
+
+# Video metadata / frames are derived from the file on disk and can change when
+# a file is replaced in place; never let the browser cache them, otherwise a
+# reload serves stale content (stream showed the old video while freshly
+# extracted frames showed the new one).
+_NO_STORE = {"Cache-Control": "no-store"}
 
 logger = logging.getLogger("media_diff.videos")
 
@@ -63,10 +69,11 @@ async def video_info(path: str = Query(..., description="视频文件绝对路�
         raise HTTPException(status_code=403, detail="无权限访问该路径")
 
     try:
-        return await pool.run_ffmpeg("probe", lambda: get_video_info(normalized))
+        info = await pool.run_ffmpeg("probe", lambda: get_video_info(normalized))
     except FFmpegError as exc:
         _handle_ffmpeg_error(exc, normalized)
         return  # unreachable
+    return JSONResponse(info, headers=_NO_STORE)
 
 
 @router.get("/stream")
@@ -163,7 +170,7 @@ async def video_frame(
     return Response(
         content=jpeg_bytes,
         media_type="image/jpeg",
-        headers={"X-Histogram": histogram_b64},
+        headers={"X-Histogram": histogram_b64, **_NO_STORE},
     )
 
 
@@ -189,7 +196,7 @@ async def video_thumbnail(
     return Response(
         content=jpeg_bytes,
         media_type="image/jpeg",
-        headers={"X-Histogram": histogram_b64},
+        headers={"X-Histogram": histogram_b64, **_NO_STORE},
     )
 
 
@@ -218,4 +225,4 @@ async def video_frame_histogram(
     import json
 
     histogram = json.loads(base64.b64decode(histogram_b64))
-    return histogram
+    return JSONResponse(histogram, headers=_NO_STORE)

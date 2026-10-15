@@ -281,3 +281,33 @@ def test_run_reports_stderr_tail_not_banner():
     message = str(exc.value)
     assert "REAL ERROR: moov atom not found" in message
     assert message.count("banner line") < 10  # only the tail is kept
+
+
+def test_get_video_info_exposes_mtime_and_size(tmp_path, monkeypatch):
+    """info carries a content version so the client can cache-bust the stream."""
+    from media_diff.utils import videos
+
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"x" * 123)
+    monkeypatch.setattr(videos, "probe_video", lambda path: {"codec": "h264"})
+    info = videos.get_video_info(str(f))
+    assert info["mtime"] == f.stat().st_mtime
+    assert info["size"] == 123
+
+
+def test_video_info_response_is_not_browser_cached(client, tmp_path, monkeypatch):
+    """The info response must not be cached, so a changed file yields a new
+    stream URL (otherwise playback reuses stale media after an in-place edit)."""
+    import media_diff.routers.videos as rv
+
+    f = tmp_path / "clip.mp4"
+    f.write_bytes(b"x")
+
+    def fake_info(_path):
+        return {"codec": "h264", "mtime": 111.0, "size": 7}
+
+    monkeypatch.setattr(rv, "get_video_info", fake_info)
+    res = client.get("/api/videos/info", params={"path": str(f)})
+    assert res.status_code == 200
+    assert res.headers.get("cache-control") == "no-store"
+    assert res.json()["mtime"] == 111.0

@@ -3,6 +3,7 @@ import type { UseVideoCompareReturn } from '../../hooks/video/useVideoCompare';
 import type { VideoPlayerApi } from '../../hooks/video/useVideoPlayer';
 import { useSharedZoom } from '../../hooks/useSharedZoom';
 import { clearFramesForOtherPaths, setPinnedFrames } from '../../api/video';
+import { sharedToOwnFrame } from '../../utils/frame';
 import type { WatermarkConfig } from '../../types';
 import type { VideoEntry } from '../../types/video';
 import type { SamplePos } from '../ColorReadout';
@@ -109,20 +110,29 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
   }, [videosKey, selectedFolders, currentVideos]);
 
   // Pin the frames each visible window may currently display (currentFrame
-  // +/- prefetch range) so the LRU cap never revokes a displayed frame.
-  const { currentFrame } = player;
+  // +/- prefetch range) so the LRU cap never revokes a displayed frame. The
+  // cache keys use each video's own frame index, so convert first.
+  const { currentFrame, refFps } = player;
   useEffect(() => {
     const pinned = new Set<string>();
     for (const f of selectedFolders) {
       const v = currentVideos.get(f.path);
       if (!v) continue;
+      const info = videoInfos.get(f.path);
       for (let d = -PREFETCH_RANGE; d <= PREFETCH_RANGE; d++) {
-        const fr = currentFrame + d;
-        if (fr >= 1) pinned.add(`${v.path}@@${fr}`);
+        const shared = currentFrame + d;
+        if (shared < 1) continue;
+        const own = sharedToOwnFrame(
+          shared,
+          refFps,
+          info?.fps ?? 0,
+          info?.frame_count ?? 0,
+        );
+        if (own >= 1) pinned.add(`${v.path}@@${own}`);
       }
     }
     setPinnedFrames(pinned);
-  }, [selectedFolders, currentVideos, currentFrame]);
+  }, [selectedFolders, currentVideos, currentFrame, videoInfos, refFps]);
 
   if (selectedFolders.length === 0) {
     return (
@@ -149,7 +159,7 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
     return { index: i, folderPath: f.path, video: currentVideos.get(f.path) ?? null };
   });
 
-  const mainFps = videoInfos.get(selectedFolders[0].path)?.fps ?? 30;
+  const mainFps = refFps;
 
   const renderWindow = (i: number) => {
     const w = allWindows[i];
@@ -170,6 +180,8 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
         videoIndex={idx}
         totalVideos={totalVideos}
         player={player}
+        refFps={refFps}
+        videoInfos={videoInfos}
         sharedZoom={sharedZoom}
         histogramEnabled={histogramEnabled}
         colorPickerEnabled={colorPickerEnabled}

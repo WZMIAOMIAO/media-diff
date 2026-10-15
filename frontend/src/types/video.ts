@@ -21,6 +21,9 @@ export interface VideoInfo {
   format: string;
   /** 后端探测：该编码浏览器是否可直接解码（false 时需转码） */
   browser_playable?: boolean;
+  /** 文件修改时间/大小，用于给流地址加版本号以避免浏览器复用过期缓存 */
+  mtime?: number;
+  size?: number;
   /** 前端注入：该 info 对应的视频路径，用于追踪刷新 */
   path?: string;
 }

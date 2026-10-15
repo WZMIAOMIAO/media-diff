@@ -335,6 +335,7 @@ def get_video_info(path: str) -> dict:
     """Cached ffprobe info."""
     try:
         mtime = os.path.getmtime(path)
+        size = os.path.getsize(path)
     except OSError as exc:
         raise FFmpegError(f"无法访问视频文件: {exc}") from exc
 
@@ -342,10 +343,16 @@ def get_video_info(path: str) -> dict:
 
     cached = video_info_cache.get(path)
     if cached is not None:
-        return cached["info"]
-
-    info = probe_video(path)
-    video_info_cache.put(path, info, mtime)
+        info = cached["info"]
+    else:
+        info = probe_video(path)
+        video_info_cache.put(path, info, mtime)
+    # Expose a content version (mtime + size) so the client can cache-bust the
+    # stream URL. Without it the browser reuses the cached media for the same
+    # URL even after the file has been replaced in place (playback then shows
+    # the old content while freshly extracted frames show the new one).
+    info["mtime"] = mtime
+    info["size"] = size
     return info
 
 

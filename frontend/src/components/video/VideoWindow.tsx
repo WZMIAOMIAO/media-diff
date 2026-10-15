@@ -9,6 +9,7 @@ import { getVideoTranscodeStatus, startVideoTranscode } from '../../api/video';
 import { clientToUV, getContentBox, EYEDROPPER_CURSOR } from '../../utils/colorSample';
 import { watermarkTextStyle } from '../../utils/watermark';
 import { isPointerInside } from '../../utils/pointer';
+import { sharedToOwnFrame } from '../../utils/frame';
 import OverlayButtons from '../OverlayButtons';
 import ColorReadout, { type SamplePos } from '../ColorReadout';
 import VideoHistogramOverlay from './VideoHistogramOverlay';
@@ -17,6 +18,7 @@ import { useI18n } from '../../i18n';
 
 interface WindowInfo {
   index: number;
+  folderPath: string;
   video: VideoEntry | null;
 }
 
@@ -28,6 +30,8 @@ interface VideoWindowProps {
   videoIndex: number;
   totalVideos: number;
   player: VideoPlayerApi;
+  refFps: number;
+  videoInfos: Map<string, VideoInfo>;
   sharedZoom: SharedZoomApi;
   histogramEnabled: boolean;
   colorPickerEnabled: boolean;
@@ -71,6 +75,8 @@ export default function VideoWindow({
   videoIndex,
   totalVideos,
   player,
+  refFps,
+  videoInfos,
   sharedZoom,
   histogramEnabled,
   colorPickerEnabled,
@@ -186,14 +192,14 @@ export default function VideoWindow({
     };
   }, [videoPath, needsTranscode]);
 
-  // load current frame when paused
-  // Clamp currentFrame to this window's own frame_count so that when videos
-  // have different lengths, the shorter one shows its last frame instead of
-  // failing the extraction request.
-  const effFrame =
-    videoInfo?.frame_count && videoInfo.frame_count > 0
-      ? Math.min(currentFrame, videoInfo.frame_count)
-      : currentFrame;
+  // The shared currentFrame is expressed in the reference video's fps. Convert
+  // it to this window's own frame index so ffmpeg extracts the same wall-clock
+  // moment even when the videos have different fps, and clamp to this video's
+  // frame count so a shorter video rests on its last frame instead of failing.
+  const toOwnFrame = (shared: number, info: VideoInfo | undefined): number =>
+    sharedToOwnFrame(shared, refFps, info?.fps ?? 0, info?.frame_count ?? 0);
+  const effFrame = toOwnFrame(currentFrame, videoInfo);
+  const ownFrameCount = videoInfo?.frame_count ?? 0;
   effFrameRef.current = effFrame;
   const loadedVideoPathRef = useRef<string | null>(null);
 
@@ -321,14 +327,21 @@ export default function VideoWindow({
     };
   }, [video, effFrame, isPlaying, videoInfo?.frame_count, frameTick]);
 
-  // overlay frame load
+  // overlay frame load. The peeked window may have a different fps, so convert
+  // the shared frame to that video's own frame index too.
+  const overlayInfo = (() => {
+    if (!overlayVideoPath) return undefined;
+    const w = allWindows.find((x) => x.video?.path === overlayVideoPath);
+    return w ? videoInfos.get(w.folderPath) : undefined;
+  })();
+  const overlayFrame = toOwnFrame(currentFrame, overlayInfo);
   useEffect(() => {
     if (!overlayVideoPath || isPlaying) {
       setOverlayUrl(null);
       return;
     }
     let cancelled = false;
-    fetchVideoFrame(overlayVideoPath, effFrame)
+    fetchVideoFrame(overlayVideoPath, overlayFrame)
       .then(({ blobUrl }) => {
         if (!cancelled) setOverlayUrl(blobUrl);
       })
@@ -336,7 +349,7 @@ export default function VideoWindow({
     return () => {
       cancelled = true;
     };
-  }, [overlayVideoPath, effFrame, isPlaying]);
+  }, [overlayVideoPath, overlayFrame, isPlaying]);
 
   // keyboard overlay (paused only). Always registered; the target window is
   // decided at key press time from the actual pointer position (falling back
@@ -539,7 +552,14 @@ export default function VideoWindow({
         {/* video element: always mounted, visible only when playing */}
         {video && (
           <video
-            src={transcodeDone ? getVideoStreamUrl(video.path) : undefined}
+            src={
+              transcodeDone
+                ? getVideoStreamUrl(
+                    video.path,
+                    `${videoInfo?.mtime ?? 0}-${videoInfo?.size ?? 0}`,
+                  )
+                : undefined
+            }
             ref={setVideoEl}
             onTimeUpdate={(e) => {
               player.onMainTimeUpdate(folderPath, e.currentTarget.currentTime);
@@ -601,7 +621,7 @@ export default function VideoWindow({
                       videoPath={video.path}
                       frame={effFrame}
                       overlayVideoPath={overlayVideoPath ?? undefined}
-                      overlayFrame={overlayVideoPath ? effFrame : undefined}
+                      overlayFrame={overlayVideoPath ? overlayFrame : undefined}
                     />
                   </div>
                 )}
@@ -618,6 +638,15 @@ export default function VideoWindow({
         {video && totalVideos > 0 && (
           <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-xs text-[#888888]">
             {videoIndex + 1}/{totalVideos}
+          </span>
+        )}
+
+        {video && ownFrameCount > 0 && (
+          <span
+            className="absolute bottom-1 left-1 z-10 text-xs text-[#cccccc] tabular-nums"
+            title={t('window.framePosition')}
+          >
+            {effFrame}/{ownFrameCount}
           </span>
         )}
 

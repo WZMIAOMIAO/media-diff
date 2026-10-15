@@ -10,6 +10,8 @@ export interface VideoPlayerApi {
   autoNext: boolean;
   muted: boolean;
   baseFrameCount: number;
+  /** Frame rate of the reference (main) video; the shared frame index is in it. */
+  refFps: number;
   registerVideoEl: (folderPath: string, el: HTMLVideoElement | null) => void;
   setSpeed: (s: number) => void;
   setLoop: (b: boolean) => void;
@@ -31,11 +33,16 @@ const SPEEDS = [0.25, 0.5, 1, 2, 4];
 // Cross-window playback sync. Each window has its own <video> element, so they
 // decode independently and slowly drift apart. The main video is the time
 // reference; the others are steered by a proportional controller on
-// playbackRate (smooth, no hard seek during playback).
+// playbackRate (smooth, no hard seek during playback). Small drift is nudged
+// back with playbackRate, but once a window falls further behind than
+// SYNC_HARD_SEEK_SEC (a stall, a buffer wait, or a restart after rapid
+// play/pause toggling) a rate nudge of ±20% can never catch up, so it is
+// re-aligned with a hard seek instead.
 const SYNC_INTERVAL_MS = 150;
 const SYNC_DEADBAND_SEC = 0.03; // ignore drift below ~1 frame
 const SYNC_GAIN = 1; // fractional rate change per second of drift
 const SYNC_MAX_ADJUST = 0.2; // clamp on the fractional rate change
+const SYNC_HARD_SEEK_SEC = 0.12; // beyond this drift a rate nudge cannot recover
 
 interface PlayerDeps {
   selectedFolders: SelectedFolder[];
@@ -80,6 +87,14 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
   const mainPathRef = useRef<string | null>(mainPath);
   mainPathRef.current = mainPath;
 
+  // The shared frame index is expressed in the reference (main) video's frame
+  // rate. Videos in a comparison can have different fps (e.g. a 24 fps original
+  // vs a 60 fps re-encode of the same clip), so the same frame N maps to a
+  // different time in each. Every frame<->time conversion therefore goes
+  // through refFps; each window converts to its own frame index for extraction.
+  const mainInfo = mainPath ? videoInfos.get(mainPath) : undefined;
+  const refFps = mainInfo && mainInfo.fps > 0 ? mainInfo.fps : 30;
+
   const applyMuted = useCallback(() => {
     for (const [folderPath, el] of videoRefs.current) {
       el.muted = mutedRef.current || folderPath !== mainPathRef.current;
@@ -104,10 +119,11 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
     applyMuted();
   }, [muted, mainPath, applyMuted]);
 
-  // Keep non-main videos aligned with the main video during playback via a
-  // proportional controller on playbackRate: the correction is proportional to
-  // the drift, so it converges smoothly without toggling and never seeks
-  // (a seek during playback would visibly freeze that window).
+  // Keep non-main videos aligned with the main video during playback. Small
+  // drift is corrected smoothly via playbackRate (no visible seek); large drift
+  // is corrected with a hard seek so a stalled/restarted window can never stay
+  // permanently out of sync. A window left paused mid-playback (its play() was
+  // dropped during a rapid play→pause→play toggle) is re-aligned and resumed.
   useEffect(() => {
     if (!isPlaying) return;
     const id = window.setInterval(() => {
@@ -117,12 +133,26 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
       if (!mainEl || mainEl.paused) return;
       const t = mainEl.currentTime;
       for (const [folderPath, el] of videoRefs.current) {
-        // Skip a window that is already seeking or still buffering; it will be
-        // caught up once it resumes.
-        if (folderPath === main || el.paused || el.seeking || el.readyState < 2) {
+        if (folderPath === main || el.readyState < 2) continue;
+        // A window whose play() was dropped/rejected would otherwise sit frozen
+        // and drift away during the whole playback. Resume it if it still has
+        // runway; leave a shorter video resting on its own last frame.
+        if (el.paused) {
+          if (el.ended || (el.duration && t >= el.duration)) continue;
+          if (Math.abs(el.currentTime - t) > SYNC_DEADBAND_SEC) el.currentTime = t;
+          el.playbackRate = speedRef.current;
+          void el.play().catch(() => {});
           continue;
         }
+        // Wait out an in-flight seek; re-align once it settles.
+        if (el.seeking) continue;
         const drift = el.currentTime - t;
+        if (Math.abs(drift) > SYNC_HARD_SEEK_SEC) {
+          // Too far gone for a rate nudge; jump straight to the reference.
+          el.currentTime = t;
+          if (el.playbackRate !== speedRef.current) el.playbackRate = speedRef.current;
+          continue;
+        }
         let rate = speedRef.current;
         if (Math.abs(drift) > SYNC_DEADBAND_SEC) {
           // Behind (drift < 0) -> speed up; ahead (drift > 0) -> slow down.
@@ -139,6 +169,10 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
   }, [isPlaying]);
 
   const baseFrameCount = (() => {
+    // The slider is in reference frames; use the main video's frame count so it
+    // matches the frame index onMainTimeUpdate produces (max across folders
+    // would be in the wrong units and leave a dead zone on the slider).
+    if (mainInfo && mainInfo.frame_count > 0) return mainInfo.frame_count;
     let m = 0;
     for (const f of selectedFolders) {
       const info = videoInfos.get(f.path);
@@ -149,19 +183,22 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
 
   const seekAllVideos = useCallback(
     (frame: number) => {
+      // frame is in reference frames; seek every window to that wall-clock time
+      // (clamped to each video's own duration) so all windows show the same
+      // moment regardless of their individual fps.
+      const t = (Math.max(1, frame) - 1) / refFps;
       for (const f of selectedFolders) {
         const el = videoRefs.current.get(f.path);
         const info = videoInfos.get(f.path);
-        if (!el || !info || info.fps <= 0) continue;
-        const maxFrame = info.frame_count;
-        const clampedFrame = Math.max(1, Math.min(frame, maxFrame));
-        const t = (clampedFrame - 1) / info.fps;
-        if (Math.abs(el.currentTime - t) > 0.02) {
-          el.currentTime = t;
+        if (!el || !info) continue;
+        const dur = el.duration || info.duration || 0;
+        const seekT = dur > 0 ? Math.min(t, Math.max(0, dur - 0.02)) : t;
+        if (Math.abs(el.currentTime - seekT) > 0.02) {
+          el.currentTime = seekT;
         }
       }
     },
-    [selectedFolders, videoInfos],
+    [selectedFolders, videoInfos, refFps],
   );
 
   const setCurrentFrame = useCallback((frame: number) => {
@@ -189,17 +226,21 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
       el.pause();
       el.playbackRate = speedRef.current;
     }
+    // Record where the main video stopped so the paused view (an ffmpeg frame)
+    // and the next play() land on the same frame. Deliberately do NOT seek the
+    // <video> elements here: while rapidly toggling, the main element may still
+    // be buffering near time 0, and seeking every window to it would yank the
+    // windows that are already ahead back to the start. play() repositions them.
     const main = selectedFolders.find((f) => currentVideos.get(f.path));
     if (main) {
       const el = videoRefs.current.get(main.path);
       const info = videoInfos.get(main.path);
       if (el && info && info.fps > 0) {
-        const frame = Math.round(el.currentTime * info.fps) + 1;
-        setCurrentFrame(Math.min(frame, info.frame_count || frame));
-        seekAllVideos(frame);
+        const frame = Math.round(el.currentTime * refFps) + 1;
+        setCurrentFrame(Math.min(frame, baseFrameCount || frame));
       }
     }
-  }, [selectedFolders, currentVideos, videoInfos, setCurrentFrame, seekAllVideos]);
+  }, [selectedFolders, currentVideos, videoInfos, refFps, baseFrameCount, setCurrentFrame]);
 
   const togglePlay = useCallback(() => {
     if (isPlayingRef.current) pause();
@@ -254,14 +295,12 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
       if (!isPlayingRef.current) return;
       const main = selectedFolders.find((f) => currentVideos.get(f.path));
       if (!main || main.path !== folderPath) return;
-      const info = videoInfos.get(main.path);
-      if (!info || info.fps <= 0) return;
-      const frame = Math.round(time * info.fps) + 1;
-      const clamped = Math.max(1, Math.min(frame, info.frame_count || frame));
+      const frame = Math.round(time * refFps) + 1;
+      const clamped = Math.max(1, Math.min(frame, baseFrameCount || frame));
       setCurrentFrameState(clamped);
       currentFrameRef.current = clamped;
     },
-    [selectedFolders, currentVideos, videoInfos],
+    [selectedFolders, currentVideos, refFps, baseFrameCount],
   );
 
   const onVideoEnded = useCallback(
@@ -355,6 +394,7 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
     autoNext,
     muted,
     baseFrameCount,
+    refFps,
     registerVideoEl,
     setSpeed,
     setLoop,
