@@ -578,8 +578,24 @@ export default function VideoWindow({
             onEnded={() => player.onVideoEnded(folderPath)}
             playsInline
             muted={muted || !isMainVideo}
-            className="absolute inset-0 w-full h-full object-contain"
-            style={{ display: isPlaying ? 'block' : 'none' }}
+            className="absolute object-contain"
+            style={{
+              display: isPlaying ? 'block' : 'none',
+              // Size the playing video to the exact same fit box as the paused
+              // frame (fitRatio is capped at 1, i.e. never upscaled past the
+              // source). A bare `object-contain` filling the whole window would
+              // instead scale a small clip up to fill it, so play and pause
+              // would jump between two different sizes.
+              ...(hasFit
+                ? {
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: baseW * zoom,
+                    height: baseH * zoom,
+                  }
+                : { left: 0, top: 0, width: '100%', height: '100%' }),
+            }}
           />
         )}
 
@@ -647,6 +663,7 @@ export default function VideoWindow({
             title={t('window.framePosition')}
           >
             {effFrame}/{ownFrameCount}
+            {videoInfo && videoInfo.fps > 0 ? ` (${formatFps(videoInfo.fps)}fps)` : ''}
           </span>
         )}
 
