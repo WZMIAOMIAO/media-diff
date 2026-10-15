@@ -30,6 +30,11 @@ export const zh: Dict = {
   'nav.alert.annotationBlindConflict': '标注模式和盲评模式不能同时开启，请先关闭当前模式',
   'nav.alert.comingSoon': '开发中',
 
+  // brand
+  'brand.name': 'Media Diff',
+  'brand.image': '图像对比',
+  'brand.video': '视频对比',
+
   // sidebar
   'sidebar.expandFolder': '展开文件夹面板',
   'sidebar.collapseFolder': '折叠文件夹面板',
@@ -269,6 +274,11 @@ export const en: Dict = {
   'nav.alert.annotationBlindConflict':
     'Annotation and Blind Review cannot be enabled at the same time. Please turn off the current mode first.',
   'nav.alert.comingSoon': 'Coming soon',
+
+  // brand
+  'brand.name': 'Media Diff',
+  'brand.image': 'Image',
+  'brand.video': 'Video',
 
   // sidebar
   'sidebar.expandFolder': 'Expand folder panel',

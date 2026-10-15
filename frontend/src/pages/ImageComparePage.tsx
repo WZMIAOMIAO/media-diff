@@ -18,7 +18,7 @@ import { useWatermark } from '../hooks/useWatermark';
 import { IMAGE_WATERMARK_KEY } from '../utils/watermarkStorage';
 
 export default function ImageComparePage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const compare = useImageCompare();
   const [histogramEnabled, setHistogramEnabled] = useState(false);
   const [colorPickerEnabled, setColorPickerEnabled] = useState(false);
@@ -31,6 +31,10 @@ export default function ImageComparePage() {
   const [annotationInfoOpen, setAnnotationInfoOpen] = useState(false);
 
   useImagePrefetch(compare);
+
+  useEffect(() => {
+    document.title = `${t('brand.name')} · ${t('brand.image')}`;
+  }, [t, lang]);
 
   useEffect(() => {
     if (!colorPickerEnabled) return;

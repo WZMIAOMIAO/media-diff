@@ -5,6 +5,7 @@ import ModeSwitcher from '../ModeSwitcher';
 import HelpButton from '../HelpButton';
 import ShortcutHelpDialog from '../ShortcutHelpDialog';
 import LanguageSwitcher from '../LanguageSwitcher';
+import GitHubButton from '../GitHubButton';
 import { useI18n } from '../../i18n';
 
 interface VideoTopNavProps {
@@ -40,7 +41,13 @@ function VideoTopNav({
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded bg-[#9a4eff]" />
-          <span className="text-base text-[#e0e0e0]">VideoCompare</span>
+          <span className="text-base text-[#e0e0e0]">{t('brand.name')}</span>
+          <span
+            className="text-xs px-1.5 py-0.5 rounded"
+            style={{ color: '#9a4eff', backgroundColor: 'rgba(154,78,255,0.15)' }}
+          >
+            {t('brand.video')}
+          </span>
         </div>
         <div className="w-px h-5 bg-[#3c3c3c]" />
         <div className="flex items-center gap-6">
@@ -80,6 +87,7 @@ function VideoTopNav({
         <LanguageSwitcher />
         <ModeSwitcher />
         <HelpButton onClick={() => setHelpOpen(true)} />
+        <GitHubButton />
       </div>
       {helpOpen && (
         <ShortcutHelpDialog mode="video" onClose={() => setHelpOpen(false)} />

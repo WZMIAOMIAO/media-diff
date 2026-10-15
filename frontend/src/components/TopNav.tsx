@@ -5,6 +5,7 @@ import ModeSwitcher from './ModeSwitcher';
 import HelpButton from './HelpButton';
 import ShortcutHelpDialog from './ShortcutHelpDialog';
 import LanguageSwitcher from './LanguageSwitcher';
+import GitHubButton from './GitHubButton';
 import { useI18n } from '../i18n';
 
 interface TopNavProps {
@@ -38,7 +39,13 @@ function TopNav({
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded bg-[#4a9eff]" />
-          <span className="text-base text-[#e0e0e0]">ImageCompare</span>
+          <span className="text-base text-[#e0e0e0]">{t('brand.name')}</span>
+          <span
+            className="text-xs px-1.5 py-0.5 rounded"
+            style={{ color: '#4a9eff', backgroundColor: 'rgba(74,158,255,0.15)' }}
+          >
+            {t('brand.image')}
+          </span>
         </div>
         <div className="w-px h-5 bg-[#3c3c3c]" />
         <div className="flex items-center gap-6">
@@ -72,6 +79,7 @@ function TopNav({
         <LanguageSwitcher />
         <ModeSwitcher />
         <HelpButton onClick={() => setHelpOpen(true)} />
+        <GitHubButton />
       </div>
       {helpOpen && (
         <ShortcutHelpDialog mode="image" onClose={() => setHelpOpen(false)} />

@@ -18,7 +18,7 @@ import { useWatermark } from '../hooks/useWatermark';
 import { VIDEO_WATERMARK_KEY } from '../utils/watermarkStorage';
 
 export default function VideoComparePage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const compare = useVideoCompare();
   const player = useVideoPlayer({
     selectedFolders: compare.selectedFolders,
@@ -35,6 +35,10 @@ export default function VideoComparePage() {
   const [blindResultOpen, setBlindResultOpen] = useState(false);
   const [annotationSetupOpen, setAnnotationSetupOpen] = useState(false);
   const [annotationInfoOpen, setAnnotationInfoOpen] = useState(false);
+
+  useEffect(() => {
+    document.title = `${t('brand.name')} · ${t('brand.video')}`;
+  }, [t, lang]);
 
   useEffect(() => {
     if (!colorPickerEnabled) return;
