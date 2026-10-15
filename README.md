@@ -2,17 +2,17 @@
 
 > 本项目代码全部由 GLM5.2 和 DeepseekV4.1Flash 开发。
 
-本地图片与视频对比工具。基于浏览器运行，支持单图/双图/三图/四图查看、同步缩放平移、直方图叠加，以及视频逐帧对比（播放同步 + 暂停抽帧做图像级精细比较）。
+本地或远程部署的图片与视频对比 / 标注 / 盲评工具。基于浏览器运行，支持单图/双图/三图/四图查看、同步缩放平移、直方图叠加，视频逐帧对比（播放同步 + 暂停抽帧做图像级精细比较），以及图像 / 视频标注与盲评。
 
-前端构建产物已随 Python 包分发，安装后一条命令即可启动，**无需安装 Node.js**。
+前端构建产物已随 Python 包分发，安装后一条命令即可启动，**无需安装 Node.js**；也可 `--host 0.0.0.0` 部署到服务器供远程访问（见 [远程部署](#远程部署)）。
 
 ## 界面预览
 
-图像对比模式（多窗口同步缩放、RGB 直方图叠加、窗口水印、盲评等）：
+图像对比模式（多窗口同步缩放、RGB 直方图叠加、窗口水印、标注、盲评等）：
 
 ![图像对比模式](assets/screenshots/image-compare.jpg)
 
-视频对比模式（多窗口逐帧对比、倍数播放、自动播放下一个视频、RGB 直方图叠加、窗口水印、盲评等）：
+视频对比模式（多窗口逐帧对比、倍数播放、自动播放下一个视频、RGB 直方图叠加、窗口水印、标注、盲评等）：
 ![视频对比模式](assets/screenshots/video-compare.png)
 
 ## 安装
@@ -144,6 +144,19 @@ media-diff clean --dry-run   # 只统计不删除
 
 排查：`tail -f` 服务端日志，或用 `curl -i 'http://<host>:<port>/api/videos/info?path=<URL编码后的绝对路径>'` 直接看 `detail`；必要时用同版本 `ffmpeg -i <文件>` 复现。若确认是该服务器的 ffmpeg 缺少对应解码器，可安装系统 ffmpeg 并用 `FFMPEG_BIN` 指定，或换用包含所需解码器的构建。
 
+## 远程部署
+
+部署到远程服务器，供局域网 / 内网多用户通过浏览器访问（前端已随包分发，**无需安装 Node.js**）：
+
+```bash
+# 监听所有网卡；建议配合 --root 只暴露数据集目录
+media-diff --host 0.0.0.0 --port 8000 --no-browser --root /data/dataset
+```
+
+之后访问 `http://<服务器IP>:8000`。
+
+**多用户**：按机器核数调大并发，例如 `--sync-threads 64 --extract-concurrency 16 --transcode-concurrency 4`。
+
 ## 技术栈
 
 | 层 | 技术 |
@@ -160,8 +173,8 @@ media-diff/
 │   ├── registry.py      # 运行实例注册表（status / stop / 启动去重）
 │   ├── app.py           # FastAPI 应用 + 前端静态托管 / SPA fallback
 │   ├── config.py        # 配置常量
-│   ├── routers/         # API 路由（filesystem / images / videos）
-│   ├── utils/           # 工具函数（缓存、图像、视频、文件系统）
+│   ├── routers/         # API 路由（filesystem / images / videos / annotations / blind_eval）
+│   ├── utils/           # 工具函数（缓存、图像、视频、文件系统、标注、盲评）
 │   └── static/          # 前端构建产物（提交进仓库，随 wheel 分发）
 ├── frontend/            # 前端源码（仅开发时使用）
 │   ├── src/
@@ -241,6 +254,13 @@ cd .. && uv build                 # 生成 dist/*.whl 与 sdist
 | GET | `/api/videos/frame` | 抽取指定帧 + 直方图 |
 | GET | `/api/videos/thumbnail` | 视频封面缩略图 + 直方图 |
 | GET | `/api/videos/histogram` | 指定帧直方图 fallback |
+| POST | `/api/annotations/check-path` | 校验标注输出路径（目录自动补默认文件名，返回是否已存在/可写） |
+| POST | `/api/annotations/load` | 读取标注 JSON |
+| POST | `/api/annotations/save` | 追加/替换写入标注（按“文件路径 + 问题”去重，支持 `image`/`video`） |
+| POST | `/api/blind-eval/setup` | 盲评初始化（交集、随机分份、每图窗口排列） |
+| POST | `/api/blind-eval/vote` | 盲评点赞投票（动态写入结果 JSON） |
+| POST | `/api/blind-eval/load` | 读取盲评结果 |
+| POST | `/api/blind-eval/save` | 写入盲评结果 |
 
 ## 许可证
 
