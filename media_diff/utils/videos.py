@@ -659,9 +659,17 @@ def start_transcode_async(path: str) -> dict:
     key = _transcode_key(path)
     with _transcode_states_lock:
         future = _transcode_futures.get(key)
-        if future is not None and not future.done():
-            return transcode_status(path)
-        _transcode_states[key] = {"state": "pending", "progress": 0.0, "error": None}
+        already_running = future is not None and not future.done()
+        if not already_running:
+            _transcode_states[key] = {"state": "pending", "progress": 0.0, "error": None}
+
+    # Read the status *outside* the lock: transcode_status() -> _get_transcode_state()
+    # re-acquires _transcode_states_lock, which is a non-reentrant threading.Lock, so
+    # calling it while already holding the lock (the join-an-in-progress-transcode
+    # path) self-deadlocks the caller. That caller is the event-loop thread, so the
+    # entire server would hang and look "unreachable".
+    if already_running:
+        return transcode_status(path)
 
     future = pool.get_executor("transcode").submit(_run_transcode_job, path)
     with _transcode_states_lock:

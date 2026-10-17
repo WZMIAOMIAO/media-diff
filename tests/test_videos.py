@@ -311,3 +311,45 @@ def test_video_info_response_is_not_browser_cached(client, tmp_path, monkeypatch
     assert res.status_code == 200
     assert res.headers.get("cache-control") == "no-store"
     assert res.json()["mtime"] == 111.0
+
+
+def test_start_transcode_async_joining_running_job_does_not_deadlock(
+    tmp_path, monkeypatch
+):
+    """Regression: joining an in-progress transcode must not self-deadlock.
+
+    ``start_transcode_async`` used to call ``transcode_status()`` while holding
+    ``_transcode_states_lock``; ``transcode_status`` -> ``_get_transcode_state``
+    re-acquires the same non-reentrant lock on the same thread. On the server
+    that thread is the event loop, so the whole process froze and ``media-diff
+    status`` reported ``unreachable``.
+    """
+    import concurrent.futures
+    import threading
+
+    from media_diff.utils import videos
+
+    path = str(tmp_path / "clip.mp4")
+    key = videos._transcode_key(path)
+    monkeypatch.setattr(videos, "_transcode_cache_ready", lambda p: False)
+
+    # Simulate a transcode that is already running (future not done).
+    videos._transcode_futures[key] = concurrent.futures.Future()
+    videos._transcode_states[key] = {"state": "running", "progress": 0.5, "error": None}
+
+    result: dict = {}
+
+    def run() -> None:
+        result["status"] = videos.start_transcode_async(path)
+
+    try:
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        worker.join(timeout=5.0)
+        assert not worker.is_alive(), (
+            "start_transcode_async deadlocked on _transcode_states_lock"
+        )
+        assert result["status"]["state"] == "running"
+    finally:
+        videos._transcode_futures.pop(key, None)
+        videos._transcode_states.pop(key, None)
