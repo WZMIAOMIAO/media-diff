@@ -12,6 +12,11 @@ export interface VideoPlayerApi {
   baseFrameCount: number;
   /** Frame rate of the reference (main) video; the shared frame index is in it. */
   refFps: number;
+  /**
+   * Folder path of the current time reference / audio source: the longest
+   * selected video (see mainPath below). ``null`` when nothing is selected.
+   */
+  mainPath: string | null;
   registerVideoEl: (folderPath: string, el: HTMLVideoElement | null) => void;
   setSpeed: (s: number) => void;
   setLoop: (b: boolean) => void;
@@ -50,10 +55,16 @@ interface PlayerDeps {
   videoInfos: Map<string, VideoInfo>;
   /** Advance to the next video; returns true if it actually moved. */
   onAutoNext?: () => boolean;
+  /**
+   * Whether every displayed video is ready to play (no pending transcode).
+   * Playback never starts until this is true, and pauses if it drops back to
+   * false, so a not-yet-ready/transcoding video is never used as the reference.
+   */
+  canPlay: boolean;
 }
 
 export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
-  const { selectedFolders, currentVideos, videoInfos, onAutoNext } = deps;
+  const { selectedFolders, currentVideos, videoInfos, onAutoNext, canPlay } = deps;
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrameState] = useState(1);
@@ -72,18 +83,38 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
   autoNextRef.current = autoNext;
   const onAutoNextRef = useRef(onAutoNext);
   onAutoNextRef.current = onAutoNext;
-  // Set when a video ends with auto-next on; the switch effect below reads it
-  // to start playing the newly selected video instead of pausing.
+  // Set when a video ends with auto-next on; the video-switch effect reads it
+  // to tell an auto-advance apart from a manual switch.
+  const autoNextJustFiredRef = useRef(false);
+  // Intent to (re)start playback once everything is ready; set when an
+  // auto-advance lands on a video that is still transcoding, consumed by the
+  // canPlay effect below. A manual switch/pause/scrub clears it.
   const autoPlayPendingRef = useRef(false);
+  const canPlayRef = useRef(canPlay);
+  canPlayRef.current = canPlay;
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
   const currentFrameRef = useRef(currentFrame);
   currentFrameRef.current = currentFrame;
 
-  // Only the main video (first folder that has a video) is allowed to produce
-  // sound; every other window stays muted to avoid overlapping audio.
-  const mainPath =
-    selectedFolders.find((f) => currentVideos.get(f.path))?.path ?? null;
+  // The time reference (and the only window allowed to produce sound) is the
+  // LONGEST selected video. That way, when durations differ, the shorter windows
+  // freeze on their last frame while the longest keeps playing to its own end
+  // (and audio continues until the longest finishes). Ties fall back to the
+  // first folder, preserving the old behavior when all lengths are equal.
+  const mainPath = (() => {
+    let best: string | null = null;
+    let bestDur = -1;
+    for (const f of selectedFolders) {
+      if (!currentVideos.get(f.path)) continue;
+      const d = videoInfos.get(f.path)?.duration ?? 0;
+      if (best === null || d > bestDur) {
+        best = f.path;
+        bestDur = d;
+      }
+    }
+    return best;
+  })();
   const mainPathRef = useRef<string | null>(mainPath);
   mainPathRef.current = mainPath;
 
@@ -124,7 +155,16 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
   // is corrected with a hard seek so a stalled/restarted window can never stay
   // permanently out of sync. A window left paused mid-playback (its play() was
   // dropped during a rapid play→pause→play toggle) is re-aligned and resumed.
+  //
+  // Corrections only run while the reference is a *stable* clock: the main must
+  // not be seeking, must have enough buffered (readyState >= HAVE_FUTURE_DATA)
+  // and its time must have advanced since the previous tick. If the reference is
+  // buffering / just started / seeking, skip the whole tick — otherwise its
+  // stale currentTime would drag healthy windows back (the "ghosting" when one
+  // window stalls).
+  const lastMainTimeRef = useRef(-1);
   useEffect(() => {
+    lastMainTimeRef.current = -1;
     if (!isPlaying) return;
     const id = window.setInterval(() => {
       const main = mainPathRef.current;
@@ -132,6 +172,10 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
       const mainEl = videoRefs.current.get(main);
       if (!mainEl || mainEl.paused) return;
       const t = mainEl.currentTime;
+      const advanced = t - lastMainTimeRef.current > 0.003;
+      lastMainTimeRef.current = t;
+      const stable = !mainEl.seeking && mainEl.readyState >= 3 && advanced;
+      if (!stable) return;
       for (const [folderPath, el] of videoRefs.current) {
         if (folderPath === main || el.readyState < 2) continue;
         // A window whose play() was dropped/rejected would otherwise sit frozen
@@ -208,6 +252,9 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
   }, []);
 
   const play = useCallback(() => {
+    // Never start until every displayed video is ready (no pending transcode);
+    // an unready/transcoding video must not become the reference.
+    if (!canPlayRef.current) return;
     // The paused view is an ffmpeg-extracted image; stepping while paused no
     // longer seeks the <video> elements, so position them right before playing.
     seekAllVideos(currentFrameRef.current);
@@ -220,27 +267,29 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
   }, [seekAllVideos]);
 
   const pause = useCallback(() => {
+    // An explicit pause cancels any pending auto-resume.
+    autoPlayPendingRef.current = false;
     setIsPlaying(false);
     isPlayingRef.current = false;
     for (const el of videoRefs.current.values()) {
       el.pause();
       el.playbackRate = speedRef.current;
     }
-    // Record where the main video stopped so the paused view (an ffmpeg frame)
-    // and the next play() land on the same frame. Deliberately do NOT seek the
-    // <video> elements here: while rapidly toggling, the main element may still
-    // be buffering near time 0, and seeking every window to it would yank the
-    // windows that are already ahead back to the start. play() repositions them.
-    const main = selectedFolders.find((f) => currentVideos.get(f.path));
+    // Record where the reference video stopped so the paused view (an ffmpeg
+    // frame) and the next play() land on the same frame. Deliberately do NOT
+    // seek the <video> elements here: while rapidly toggling, the reference may
+    // still be buffering near time 0, and seeking every window to it would yank
+    // the windows that are already ahead back to the start. play() repositions.
+    const main = mainPathRef.current;
     if (main) {
-      const el = videoRefs.current.get(main.path);
-      const info = videoInfos.get(main.path);
+      const el = videoRefs.current.get(main);
+      const info = videoInfos.get(main);
       if (el && info && info.fps > 0) {
         const frame = Math.round(el.currentTime * refFps) + 1;
         setCurrentFrame(Math.min(frame, baseFrameCount || frame));
       }
     }
-  }, [selectedFolders, currentVideos, videoInfos, refFps, baseFrameCount, setCurrentFrame]);
+  }, [videoInfos, refFps, baseFrameCount, setCurrentFrame]);
 
   const togglePlay = useCallback(() => {
     if (isPlayingRef.current) pause();
@@ -254,6 +303,7 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
       // below. Seeking every <video> per progress-bar `onChange` (which fires
       // continuously while dragging) was the main cause of drag jank.
       const clamped = Math.max(1, Math.min(frame, baseFrameCount || frame));
+      autoPlayPendingRef.current = false;
       setCurrentFrame(clamped);
       setIsPlaying(false);
       isPlayingRef.current = false;
@@ -269,6 +319,7 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
       // (debounced) so pressing play starts without a seek stall.
       const max = baseFrameCount > 0 ? baseFrameCount : Number.MAX_SAFE_INTEGER;
       const next = Math.max(1, Math.min(currentFrameRef.current + delta, max));
+      autoPlayPendingRef.current = false;
       setCurrentFrame(next);
       setIsPlaying(false);
       isPlayingRef.current = false;
@@ -293,20 +344,18 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
   const onMainTimeUpdate = useCallback(
     (folderPath: string, time: number) => {
       if (!isPlayingRef.current) return;
-      const main = selectedFolders.find((f) => currentVideos.get(f.path));
-      if (!main || main.path !== folderPath) return;
+      if (mainPathRef.current !== folderPath) return;
       const frame = Math.round(time * refFps) + 1;
       const clamped = Math.max(1, Math.min(frame, baseFrameCount || frame));
       setCurrentFrameState(clamped);
       currentFrameRef.current = clamped;
     },
-    [selectedFolders, currentVideos, refFps, baseFrameCount],
+    [refFps, baseFrameCount],
   );
 
   const onVideoEnded = useCallback(
     (folderPath: string) => {
-      const main = selectedFolders.find((f) => currentVideos.get(f.path));
-      if (!main || main.path !== folderPath) return;
+      if (mainPathRef.current !== folderPath) return;
       if (loopRef.current) {
         for (const el of videoRefs.current.values()) {
           el.currentTime = 0;
@@ -317,14 +366,14 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
       // Auto-advance: only if it actually moves to another video, otherwise
       // fall through to a normal pause (end of the list).
       if (autoNextRef.current && onAutoNextRef.current?.()) {
-        autoPlayPendingRef.current = true;
+        autoNextJustFiredRef.current = true;
         return;
       }
       setIsPlaying(false);
       isPlayingRef.current = false;
       for (const el of videoRefs.current.values()) el.pause();
     },
-    [selectedFolders, currentVideos],
+    [],
   );
 
   const setSpeed = useCallback((s: number) => {
@@ -351,6 +400,9 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
     if (b) {
       setLoopState(false);
       loopRef.current = false;
+    } else {
+      // Turning auto-next off cancels any queued "resume when ready".
+      autoPlayPendingRef.current = false;
     }
   }, []);
 
@@ -368,16 +420,46 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
     .map((f) => `${f.path}:${currentVideos.get(f.path)?.path ?? ''}`)
     .join('|');
   useEffect(() => {
-    const autoPlay = autoPlayPendingRef.current;
-    autoPlayPendingRef.current = false;
+    const fromAutoNext = autoNextJustFiredRef.current;
+    autoNextJustFiredRef.current = false;
     setIsPlaying(false);
     isPlayingRef.current = false;
     setCurrentFrame(1);
     seekAllVideos(1);
     for (const el of videoRefs.current.values()) el.pause();
-    if (autoPlay) play();
+    if (!fromAutoNext) {
+      // Manual switch → drop any queued "resume when ready".
+      autoPlayPendingRef.current = false;
+    } else if (canPlayRef.current) {
+      // Auto-next landed on a ready video → keep playing (as before).
+      autoPlayPendingRef.current = false;
+      play();
+    } else {
+      // Auto-next landed on a video that is still transcoding → wait and
+      // resume automatically once everything is ready (canPlay effect).
+      autoPlayPendingRef.current = true;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videosKey]);
+
+  // Pause (without cancelling a pending auto-resume) as soon as any displayed
+  // video becomes not-ready, so an unready/transcoding video never drives the
+  // reference. The autoPlayPendingRef intent is left intact for the resume below.
+  useEffect(() => {
+    if (canPlay) return;
+    if (!isPlayingRef.current) return;
+    setIsPlaying(false);
+    isPlayingRef.current = false;
+    for (const el of videoRefs.current.values()) el.pause();
+  }, [canPlay]);
+
+  // Resume playback once every video is ready again, if auto-next had queued it.
+  useEffect(() => {
+    if (!canPlay) return;
+    if (!autoPlayPendingRef.current) return;
+    autoPlayPendingRef.current = false;
+    play();
+  }, [canPlay, play]);
 
   // clamp current frame when base frame count shrinks
   useEffect(() => {
@@ -395,6 +477,7 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
     muted,
     baseFrameCount,
     refFps,
+    mainPath,
     registerVideoEl,
     setSpeed,
     setLoop,

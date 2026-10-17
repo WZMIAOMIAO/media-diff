@@ -25,6 +25,7 @@ export default function VideoComparePage() {
     currentVideos: compare.currentVideos,
     videoInfos: compare.videoInfos,
     onAutoNext: compare.nextVideo,
+    canPlay: compare.allVideosReady,
   });
   const [histogramEnabled, setHistogramEnabled] = useState(false);
   const [colorPickerEnabled, setColorPickerEnabled] = useState(false);

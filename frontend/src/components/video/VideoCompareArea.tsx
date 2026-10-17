@@ -31,7 +31,9 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
   const { t } = useI18n();
   const sharedZoom = useSharedZoom();
   const { zoomByAt } = sharedZoom;
-  const { selectedFolders, filteredVideos, currentVideos, currentVideoIndices, videoInfos, nextVideo, prevVideo, blind } = compare;
+  const { selectedFolders, filteredVideos, currentVideos, currentVideoIndices, videoInfos, nextVideo, prevVideo, blind, allVideosReady, reportTranscodeState } = compare;
+  // Playback cannot start while any displayed video is still transcoding.
+  const playDisabled = !allVideosReady;
   const [samplePos, setSamplePos] = useState<SamplePos | null>(null);
 
   const handleSample = useCallback((pos: SamplePos | null) => {
@@ -79,12 +81,13 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
         stepFrame(1);
       } else if (e.key === ' ') {
         e.preventDefault();
-        togglePlay();
+        // Space can pause, but cannot start playback until every video is ready.
+        if (isPlaying || allVideosReady) togglePlay();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [nextVideo, prevVideo, stepFrame, togglePlay, zoomByAt, isPlaying]);
+  }, [nextVideo, prevVideo, stepFrame, togglePlay, zoomByAt, isPlaying, allVideosReady]);
 
   // reset fit on video switch
   const { resetFit } = sharedZoom;
@@ -187,6 +190,7 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
         colorPickerEnabled={colorPickerEnabled}
         samplePos={samplePos}
         onSample={handleSample}
+        onTranscodeState={reportTranscodeState}
         watermarkConfig={watermarkConfigs[i]}
         allWindows={allWindows}
         titlePosition={selectedFolders.length === 4 && i >= 2 ? 'bottom' : 'top'}
@@ -228,7 +232,7 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
   return (
     <main className="flex-1 min-w-0 min-h-0 flex flex-col">
       {windowsArea}
-      <PlayerBar player={player} mainFps={mainFps} />
+      <PlayerBar player={player} mainFps={mainFps} playDisabled={playDisabled} />
     </main>
   );
 }

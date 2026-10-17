@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { voteBlindEval } from '../../api';
 import { getVideoInfo, listVideos } from '../../api/video';
-import type { VideoEntry, VideoInfo } from '../../types/video';
+import type { TranscodeState, VideoEntry, VideoInfo } from '../../types/video';
 import type {
   AnnotationApi,
   AnnotationEntry,
@@ -35,6 +35,14 @@ export interface UseVideoCompareReturn {
 
   currentVideos: Map<string, VideoEntry | null>;
   videoInfos: Map<string, VideoInfo>;
+  /**
+   * True when every displayed video is ready to play: playable videos, and
+   * videos that need transcoding have finished. Playback is gated on this so a
+   * not-yet-ready/transcoding video is never used as the sync reference.
+   */
+  allVideosReady: boolean;
+  /** Report a window's live transcode state so allVideosReady can be derived. */
+  reportTranscodeState: (folderPath: string, state: TranscodeState) => void;
 
   searchQuery: string;
   setSearchQuery: (q: string) => void;
@@ -117,8 +125,20 @@ export function useVideoCompare(): UseVideoCompareReturn {
   const videosRef = useRef<Map<string, VideoEntry[]>>(new Map());
   const indicesRef = useRef<Map<string, number>>(new Map());
   const infosRef = useRef<Map<string, VideoInfo>>(new Map());
+  // Live transcode state per folder, reported by each VideoWindow, so the page
+  // can gate playback until every displayed video is ready.
+  const transcodeStatesRef = useRef<Map<string, TranscodeState>>(new Map());
   const [tick, setTick] = useState(0);
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
+
+  const reportTranscodeState = useCallback(
+    (folderPath: string, state: TranscodeState) => {
+      if (transcodeStatesRef.current.get(folderPath) === state) return;
+      transcodeStatesRef.current.set(folderPath, state);
+      forceUpdate();
+    },
+    [forceUpdate],
+  );
 
   const [searchQuery, setSearchQuery] = useState('');
   const [intersectionMode, setIntersectionModeState] = useState(false);
@@ -739,6 +759,21 @@ export function useVideoCompare(): UseVideoCompareReturn {
     };
   }
 
+  // Ready when every displayed video is playable as-is, or has finished
+  // transcoding. Missing metadata counts as not-ready so we never start against
+  // a video we have not probed yet.
+  const allVideosReady = (() => {
+    for (const f of selectedFolders) {
+      if (!currentVideos.get(f.path)) continue;
+      const info = videoInfos.get(f.path);
+      if (!info) return false;
+      if (info.browser_playable === false) {
+        if (transcodeStatesRef.current.get(f.path) !== 'done') return false;
+      }
+    }
+    return true;
+  })();
+
   return {
     selectedFolders,
     addFolder,
@@ -756,6 +791,8 @@ export function useVideoCompare(): UseVideoCompareReturn {
     selectVideoByPath,
     currentVideos,
     videoInfos,
+    allVideosReady,
+    reportTranscodeState,
     searchQuery,
     setSearchQuery,
     intersectionMode,

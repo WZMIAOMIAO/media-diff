@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SharedZoomApi } from '../../hooks/useSharedZoom';
 import type { VideoPlayerApi } from '../../hooks/video/useVideoPlayer';
 import type { WatermarkConfig } from '../../types';
-import type { TranscodeStatus, VideoEntry, VideoInfo } from '../../types/video';
+import type { TranscodeState, TranscodeStatus, VideoEntry, VideoInfo } from '../../types/video';
 import { fetchVideoFrame } from '../../api/video';
 import { getVideoStreamUrl } from '../../api/video';
 import { getVideoTranscodeStatus, startVideoTranscode } from '../../api/video';
@@ -37,6 +37,8 @@ interface VideoWindowProps {
   colorPickerEnabled: boolean;
   samplePos: SamplePos | null;
   onSample: (pos: SamplePos | null) => void;
+  /** Report this window's live transcode state (for playback gating). */
+  onTranscodeState: (folderPath: string, state: TranscodeState) => void;
   watermarkConfig?: WatermarkConfig;
   allWindows: WindowInfo[];
   titlePosition?: 'top' | 'bottom';
@@ -82,6 +84,7 @@ export default function VideoWindow({
   colorPickerEnabled,
   samplePos,
   onSample,
+  onTranscodeState,
   watermarkConfig,
   allWindows,
   titlePosition = 'top',
@@ -169,6 +172,9 @@ export default function VideoWindow({
       setTranscode(null);
       return;
     }
+    // Report "pending" right away so a switch to a not-yet-transcoded video
+    // cannot briefly look ready (based on a previous video's cached state).
+    onTranscodeState(folderPath, 'pending');
     let cancelled = false;
     let timer: number | null = null;
     const poll = async () => {
@@ -176,6 +182,7 @@ export default function VideoWindow({
         const status = await getVideoTranscodeStatus(videoPath);
         if (cancelled) return;
         setTranscode(status);
+        onTranscodeState(folderPath, status.state);
         if (status.state !== 'done' && status.state !== 'error') {
           timer = window.setTimeout(poll, 500);
         }
@@ -190,7 +197,7 @@ export default function VideoWindow({
       cancelled = true;
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [videoPath, needsTranscode]);
+  }, [videoPath, needsTranscode, folderPath, onTranscodeState]);
 
   // The shared currentFrame is expressed in the reference video's fps. Convert
   // it to this window's own frame index so ffmpeg extracts the same wall-clock
@@ -453,8 +460,9 @@ export default function VideoWindow({
       : 0;
   const fitPercent = fitRatio > 0 ? Math.round(fitRatio * zoom * 100) : Math.round(zoom * 100);
   const cursor = canDrag ? (dragRef.current ? 'grabbing' : 'grab') : 'default';
-  const mainVideoPath = allWindows.find((w) => w.video)?.video?.path ?? null;
-  const isMainVideo = video != null && video.path === mainVideoPath;
+  // The player's reference (time base + audio source) is the longest video;
+  // only that window plays sound. Use the player's own choice so both agree.
+  const isMainVideo = video != null && folderPath === player.mainPath;
 
   const pickerSource = isPlaying ? videoElRef.current : imgRef.current;
   const pickerVersion = `${zoom},${panX},${panY},${isPlaying},${frameUrl ?? ''}`;

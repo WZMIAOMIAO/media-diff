@@ -6,6 +6,8 @@ import { useI18n } from '../../i18n';
 interface PlayerBarProps {
   player: VideoPlayerApi;
   mainFps: number;
+  /** Disables starting playback while a video still needs transcoding. */
+  playDisabled: boolean;
 }
 
 function formatTime(frame: number, fps: number): string {
@@ -45,10 +47,12 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
   );
 }
 
-function PlayerBar({ player, mainFps }: PlayerBarProps) {
+function PlayerBar({ player, mainFps, playDisabled }: PlayerBarProps) {
   const { t } = useI18n();
   const { isPlaying, currentFrame, baseFrameCount, speed, loop, autoNext, muted } = player;
   const max = Math.max(1, baseFrameCount);
+  // Only block *starting* playback; pausing stays available.
+  const startBlocked = playDisabled && !isPlaying;
 
   const onProgressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = parseInt(e.target.value, 10);
@@ -60,8 +64,20 @@ function PlayerBar({ player, mainFps }: PlayerBarProps) {
       <button
         type="button"
         onClick={player.togglePlay}
-        title={isPlaying ? t('player.pause') : t('player.play')}
-        className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-[#4a9eff] hover:opacity-90 text-white"
+        disabled={startBlocked}
+        aria-label="play-pause"
+        title={
+          startBlocked
+            ? t('player.waitTranscode')
+            : isPlaying
+              ? t('player.pause')
+              : t('player.play')
+        }
+        className={`shrink-0 w-9 h-9 flex items-center justify-center rounded-full text-white ${
+          startBlocked
+            ? 'bg-[#3c3c3c] opacity-60 cursor-not-allowed'
+            : 'bg-[#4a9eff] hover:opacity-90'
+        }`}
       >
         {isPlaying ? '❚❚' : '▶'}
       </button>

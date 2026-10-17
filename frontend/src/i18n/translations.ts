@@ -101,6 +101,7 @@ export const zh: Dict = {
   // player bar
   'player.play': '播放 (空格)',
   'player.pause': '暂停 (空格)',
+  'player.waitTranscode': '等待转码完成后可播放',
   'player.prevFrame': '上一帧 (a)',
   'player.nextFrame': '下一帧 (d)',
   'player.loop': '循环',
@@ -349,6 +350,7 @@ export const en: Dict = {
   // player bar
   'player.play': 'Play (Space)',
   'player.pause': 'Pause (Space)',
+  'player.waitTranscode': 'Waiting for transcoding to finish',
   'player.prevFrame': 'Previous frame (a)',
   'player.nextFrame': 'Next frame (d)',
   'player.loop': 'Loop',
