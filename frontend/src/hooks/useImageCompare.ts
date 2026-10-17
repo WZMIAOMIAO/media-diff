@@ -53,8 +53,21 @@ export interface UseImageCompareReturn {
   setCurrentIndex: (folderPath: string, idx: number) => void;
   nextImage: () => void;
   prevImage: () => void;
-  alignByName: (folderPath: string, imageName: string) => void;
+  alignByName: (folderPath: string, imageName: string, anchorTop?: number) => void;
   alignByIndex: (idx: number) => void;
+  /**
+   * Increments on every align action (Shift/Ctrl+click). The thumbnail columns
+   * watch it to line up their scroll so the aligned image sits at the same
+   * position across columns.
+   */
+  alignNonce: number;
+  /**
+   * The column the align action originated from - it keeps its scroll position
+   * unchanged, and the other columns line their matched image up to
+   * ``alignOffset`` (that image's top offset within the source column's viewport).
+   */
+  alignSourcePath: string | null;
+  alignOffset: number;
 
   // 搜索
   searchQuery: string;
@@ -114,6 +127,10 @@ export function useImageCompare(): UseImageCompareReturn {
   const indicesRef = useRef<Map<string, number>>(new Map());
   const [tick, setTick] = useState(0);
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
+  // Bumped on every align action so thumbnail columns line up their scroll.
+  const [alignNonce, setAlignNonce] = useState(0);
+  const alignSourcePathRef = useRef<string | null>(null);
+  const alignOffsetRef = useRef(0);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [intersectionMode, setIntersectionModeState] = useState(false);
@@ -494,7 +511,7 @@ export function useImageCompare(): UseImageCompareReturn {
   // Ctrl+点击：所有文件夹对齐到相同配对 key 的图片（扁平=文件名，递归=相对路径），
   // 找不到的回退到相同序号。
   const alignByName = useCallback(
-    (folderPath: string, key: string) => {
+    (folderPath: string, key: string, anchorTop = 0) => {
       const list = filteredImagesRef.current.get(folderPath);
       if (!list || !key) return;
       const blind = blindRef.current;
@@ -523,6 +540,9 @@ export function useImageCompare(): UseImageCompareReturn {
         next.set(f.path, Math.max(0, Math.min(targetIdx, l.length - 1)));
       }
       indicesRef.current = next;
+      alignSourcePathRef.current = folderPath;
+      alignOffsetRef.current = anchorTop;
+      setAlignNonce((n) => n + 1);
       forceUpdate();
     },
     [applyBlindIndex, forceUpdate],
@@ -672,6 +692,9 @@ export function useImageCompare(): UseImageCompareReturn {
     prevImage,
     alignByName,
     alignByIndex,
+    alignNonce,
+    alignSourcePath: alignSourcePathRef.current,
+    alignOffset: alignOffsetRef.current,
     searchQuery,
     setSearchQuery,
     intersectionMode,

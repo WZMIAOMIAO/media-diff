@@ -6,7 +6,7 @@ import { useI18n } from '../i18n';
 interface ThumbnailItemProps {
   image: FileEntry;
   selected: boolean;
-  onClick: (e: { ctrlKey: boolean; metaKey: boolean }) => void;
+  onClick: (e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) => void;
 }
 
 function ThumbnailItem({ image, selected, onClick }: ThumbnailItemProps) {
@@ -52,7 +52,9 @@ function ThumbnailItem({ image, selected, onClick }: ThumbnailItemProps) {
 
   return (
     <div
-      onClick={(e) => onClick({ ctrlKey: e.ctrlKey, metaKey: e.metaKey })}
+      onClick={(e) =>
+        onClick({ ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey })
+      }
       title={image.rel ?? image.name}
       className={`flex flex-col h-full px-1 pt-1 pb-0.5 cursor-default border-b border-[#333333] ${
         selected

@@ -6,7 +6,7 @@ import type { VideoEntry } from '../../types/video';
 interface VideoThumbnailItemProps {
   video: VideoEntry;
   selected: boolean;
-  onClick: (e: { ctrlKey: boolean; metaKey: boolean }) => void;
+  onClick: (e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) => void;
 }
 
 function VideoThumbnailItem({ video, selected, onClick }: VideoThumbnailItemProps) {
@@ -52,7 +52,9 @@ function VideoThumbnailItem({ video, selected, onClick }: VideoThumbnailItemProp
 
   return (
     <div
-      onClick={(e) => onClick({ ctrlKey: e.ctrlKey, metaKey: e.metaKey })}
+      onClick={(e) =>
+        onClick({ ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey })
+      }
       title={video.rel ?? video.name}
       className={`flex flex-col h-full px-1 pt-1 pb-0.5 cursor-default border-b border-[#333333] ${
         selected

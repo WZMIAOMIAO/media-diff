@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type UIEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type UIEvent } from 'react';
 import type { VideoEntry } from '../../types/video';
 import type { SelectedFolder } from '../../types';
 import VideoThumbnailItem from './VideoThumbnailItem';
@@ -9,7 +9,17 @@ interface VideoThumbnailColumnProps {
   videos: VideoEntry[];
   originalCount: number;
   currentIndex: number;
-  onSelect: (index: number, e: { ctrlKey: boolean; metaKey: boolean }) => void;
+  /** Changes on each align action; forces the column to line up the aligned row. */
+  alignNonce: number;
+  /** The column the align originated from (keeps its position). */
+  alignSourcePath: string | null;
+  /** Viewport-top offset of the source column's aligned video. */
+  alignOffset: number;
+  onSelect: (
+    index: number,
+    e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean },
+    topInViewport: number,
+  ) => void;
 }
 
 const ITEM_HEIGHT = 220;
@@ -20,12 +30,18 @@ function VideoThumbnailColumn({
   videos,
   originalCount,
   currentIndex,
+  alignNonce,
+  alignSourcePath,
+  alignOffset,
   onSelect,
 }: VideoThumbnailColumnProps) {
   const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportH, setViewportH] = useState(0);
+  // Intended scroll offset; lets us repair the browser resetting scrollTop to 0
+  // when React moves this column's DOM node on reorder (no scroll event fires).
+  const desiredScrollRef = useRef(0);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -38,19 +54,46 @@ function VideoThumbnailColumn({
     return () => ro.disconnect();
   }, []);
 
-  useEffect(() => {
+  // Auto-scroll to the selected item; on an align action pin it to the TOP so
+  // the same video lines up across columns.
+  const alignNonceRef = useRef(alignNonce);
+  useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    const alignRequested = alignNonceRef.current !== alignNonce;
+    alignNonceRef.current = alignNonce;
     const targetTop = currentIndex * ITEM_HEIGHT;
     const targetBottom = targetTop + ITEM_HEIGHT;
-    if (targetTop < el.scrollTop) {
-      el.scrollTop = targetTop;
+    let next = el.scrollTop;
+    if (alignRequested) {
+      if (folder.path === alignSourcePath) {
+        // Source column keeps its position; the others line up to it.
+        next = el.scrollTop;
+      } else {
+        next = targetTop - alignOffset;
+      }
+    } else if (targetTop < el.scrollTop) {
+      next = targetTop;
     } else if (targetBottom > el.scrollTop + el.clientHeight) {
-      el.scrollTop = targetBottom - el.clientHeight;
+      next = targetBottom - el.clientHeight;
     }
-  }, [currentIndex]);
+    if (next !== el.scrollTop) el.scrollTop = next;
+    desiredScrollRef.current = el.scrollTop;
+    setScrollTop(el.scrollTop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, alignNonce]);
+
+  // Repair the scroll position after React moves the column's DOM node.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (el.scrollTop !== desiredScrollRef.current) {
+      el.scrollTop = desiredScrollRef.current;
+    }
+  });
 
   const onScroll = (e: UIEvent<HTMLDivElement>) => {
+    desiredScrollRef.current = e.currentTarget.scrollTop;
     setScrollTop(e.currentTarget.scrollTop);
   };
 
@@ -97,7 +140,7 @@ function VideoThumbnailColumn({
                   <VideoThumbnailItem
                     video={vid}
                     selected={idx === currentIndex}
-                    onClick={(e) => onSelect(idx, e)}
+                    onClick={(e) => onSelect(idx, e, idx * ITEM_HEIGHT - scrollTop)}
                   />
                 </div>
               );

@@ -100,8 +100,13 @@ export default function ImageWindow({
     return () => { cancelled = true; };
   }, [image?.path]);
 
+  // Overlay only counts as active while its target image is still one of the
+  // displayed windows. Without this, a stale overlayPath (a digit keyup missed
+  // because the window lost focus) would keep fetching "the previous image" and
+  // paint it over the current window.
+  const overlayActive = !!overlayPath && allWindows.some((w) => w.image?.path === overlayPath);
   useEffect(() => {
-    if (!overlayPath) {
+    if (!overlayActive || !overlayPath) {
       setOverlayUrl(null);
       return;
     }
@@ -110,7 +115,28 @@ export default function ImageWindow({
       if (!cancelled) setOverlayUrl(url);
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, [overlayPath]);
+  }, [overlayActive, overlayPath]);
+
+  // Switching to another image invalidates any overlay.
+  useEffect(() => {
+    setOverlayPath(null);
+    setOverlayUrl(null);
+  }, [image?.path]);
+
+  // A digit keyup can be lost when the window loses focus (alt-tab, switching
+  // away before releasing). Clear the overlay then too so it cannot stick.
+  useEffect(() => {
+    const clear = () => setOverlayPath(null);
+    const onVis = () => {
+      if (document.hidden) clear();
+    };
+    window.addEventListener('blur', clear);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('blur', clear);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
 
   useEffect(() => {
     // The handler is always registered; the target window is decided at key
@@ -327,7 +353,7 @@ export default function ImageWindow({
                 className={`block object-contain ${hasFit ? 'w-full h-full' : 'max-w-full max-h-full'}`}
                 draggable={false}
               />
-              {overlayUrl && (
+              {overlayActive && overlayUrl && (
                 <img
                   src={overlayUrl}
                   alt="overlay"
@@ -338,7 +364,10 @@ export default function ImageWindow({
             </div>
             {histogramEnabled && image && (
               <div className="absolute top-1 left-1 z-10">
-                <HistogramOverlay imagePath={image.path} overlayImagePath={overlayPath ?? undefined} />
+                <HistogramOverlay
+                  imagePath={image.path}
+                  overlayImagePath={overlayActive ? overlayPath ?? undefined : undefined}
+                />
               </div>
             )}
             {watermarkConfig?.text && (

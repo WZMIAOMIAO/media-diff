@@ -336,14 +336,20 @@ export default function VideoWindow({
 
   // overlay frame load. The peeked window may have a different fps, so convert
   // the shared frame to that video's own frame index too.
-  const overlayInfo = (() => {
-    if (!overlayVideoPath) return undefined;
-    const w = allWindows.find((x) => x.video?.path === overlayVideoPath);
-    return w ? videoInfos.get(w.folderPath) : undefined;
-  })();
+  //
+  // The overlay only counts as active while its target video is still one of the
+  // currently displayed windows. Without this, a stale overlayVideoPath (e.g. a
+  // digit keyup that was missed because the window lost focus) would keep
+  // extracting "the previous video" and paint it over the current window on
+  // every pause - exactly the "old frame stuck on top" bug.
+  const overlayTarget = overlayVideoPath
+    ? allWindows.find((x) => x.video?.path === overlayVideoPath)
+    : undefined;
+  const overlayActive = !!overlayTarget;
+  const overlayInfo = overlayTarget ? videoInfos.get(overlayTarget.folderPath) : undefined;
   const overlayFrame = toOwnFrame(currentFrame, overlayInfo);
   useEffect(() => {
-    if (!overlayVideoPath || isPlaying) {
+    if (!overlayActive || !overlayVideoPath || isPlaying) {
       setOverlayUrl(null);
       return;
     }
@@ -356,7 +362,30 @@ export default function VideoWindow({
     return () => {
       cancelled = true;
     };
-  }, [overlayVideoPath, overlayFrame, isPlaying]);
+  }, [overlayActive, overlayVideoPath, overlayFrame, isPlaying]);
+
+  // Switching to another video invalidates any overlay (it referred to the
+  // previous video); never carry it across.
+  useEffect(() => {
+    setOverlayVideoPath(null);
+    setOverlayUrl(null);
+  }, [video?.path]);
+
+  // A digit keyup can be lost when the window loses focus (alt-tab, switching to
+  // another window before releasing). Clear the overlay then too so it cannot
+  // stick.
+  useEffect(() => {
+    const clear = () => setOverlayVideoPath(null);
+    const onVis = () => {
+      if (document.hidden) clear();
+    };
+    window.addEventListener('blur', clear);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('blur', clear);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
 
   // keyboard overlay (paused only). Always registered; the target window is
   // decided at key press time from the actual pointer position (falling back
@@ -630,7 +659,7 @@ export default function VideoWindow({
                     className={`block object-contain ${hasFit ? 'w-full h-full' : 'max-w-full max-h-full'}`}
                     draggable={false}
                   />
-                  {overlayUrl && (
+                  {overlayActive && overlayUrl && (
                     <img
                       src={overlayUrl}
                       alt="overlay"
@@ -644,8 +673,8 @@ export default function VideoWindow({
                     <VideoHistogramOverlay
                       videoPath={video.path}
                       frame={effFrame}
-                      overlayVideoPath={overlayVideoPath ?? undefined}
-                      overlayFrame={overlayVideoPath ? overlayFrame : undefined}
+                      overlayVideoPath={overlayActive ? overlayVideoPath ?? undefined : undefined}
+                      overlayFrame={overlayActive ? overlayFrame : undefined}
                     />
                   </div>
                 )}

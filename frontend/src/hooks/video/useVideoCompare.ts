@@ -29,8 +29,16 @@ export interface UseVideoCompareReturn {
   /** Advance every window to the next video; returns true if it moved. */
   nextVideo: () => boolean;
   prevVideo: () => void;
-  alignByName: (folderPath: string, videoName: string) => void;
+  alignByName: (folderPath: string, videoName: string, anchorTop?: number) => void;
   alignByIndex: (idx: number) => void;
+  /**
+   * Increments on every align action (Shift/Ctrl+click). Thumbnail columns watch
+   * it to line up their scroll so the aligned video sits at the same position.
+   */
+  alignNonce: number;
+  /** Column the align originated from (keeps its position); others match it. */
+  alignSourcePath: string | null;
+  alignOffset: number;
   selectVideoByPath: (videoPath: string) => boolean;
 
   currentVideos: Map<string, VideoEntry | null>;
@@ -130,6 +138,10 @@ export function useVideoCompare(): UseVideoCompareReturn {
   const transcodeStatesRef = useRef<Map<string, TranscodeState>>(new Map());
   const [tick, setTick] = useState(0);
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
+  // Bumped on every align action so thumbnail columns line up their scroll.
+  const [alignNonce, setAlignNonce] = useState(0);
+  const alignSourcePathRef = useRef<string | null>(null);
+  const alignOffsetRef = useRef(0);
 
   const reportTranscodeState = useCallback(
     (folderPath: string, state: TranscodeState) => {
@@ -550,7 +562,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
   // Align every window to the entry whose pairing key matches `key`
   // (file name in flat mode, folder-relative path in recursive mode).
   const alignByName = useCallback(
-    (folderPath: string, key: string) => {
+    (folderPath: string, key: string, anchorTop = 0) => {
       const list = filteredVideosRef.current.get(folderPath);
       if (!list || !key) return;
       const blind = blindRef.current;
@@ -579,6 +591,9 @@ export function useVideoCompare(): UseVideoCompareReturn {
         next.set(f.path, Math.max(0, Math.min(targetIdx, l.length - 1)));
       }
       indicesRef.current = next;
+      alignSourcePathRef.current = folderPath;
+      alignOffsetRef.current = anchorTop;
+      setAlignNonce((n) => n + 1);
       forceUpdate();
     },
     [applyBlindIndex, forceUpdate],
@@ -788,6 +803,9 @@ export function useVideoCompare(): UseVideoCompareReturn {
     prevVideo,
     alignByName,
     alignByIndex,
+    alignNonce,
+    alignSourcePath: alignSourcePathRef.current,
+    alignOffset: alignOffsetRef.current,
     selectVideoByPath,
     currentVideos,
     videoInfos,

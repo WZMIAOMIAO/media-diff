@@ -146,13 +146,18 @@ function ThumbnailPanel({ compare }: ThumbnailPanelProps) {
                 images={filtered}
                 originalCount={original}
                 currentIndex={compare.currentIndices.get(f.path) ?? 0}
-                onSelect={(idx, e) => {
-                  if (e.ctrlKey || e.metaKey) {
+                alignNonce={compare.alignNonce}
+                alignSourcePath={compare.alignSourcePath}
+                alignOffset={compare.alignOffset}
+                onSelect={(idx, e, topInViewport) => {
+                  // Ctrl/Cmd or Shift: align every window to the same image
+                  // (and line up the preview columns).
+                  if (e.ctrlKey || e.metaKey || e.shiftKey) {
                     const entry = filtered[idx];
                     const key = compare.recursiveMode
                       ? entry?.rel ?? entry?.name ?? ''
                       : entry?.name ?? '';
-                    compare.alignByName(f.path, key);
+                    compare.alignByName(f.path, key, topInViewport);
                   } else {
                     compare.setCurrentIndex(f.path, idx);
                   }
