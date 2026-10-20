@@ -2,13 +2,23 @@ import os
 import re
 import string
 import sys
+import zipfile
 
-from media_diff.config import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
+from media_diff.config import (
+    IMAGE_EXTENSIONS,
+    VIDEO_EXTENSIONS,
+    ZIP_COMPRESSION,
+)
 from media_diff.utils.security import get_access_root
 
 # Safety cap for recursive scans so a pathological tree cannot produce an
 # unbounded response. Callers surface truncation via the ``truncated`` flag.
 MAX_RECURSIVE_ENTRIES = 5000
+
+# A folder download copies every entry, so cap the total number of entries
+# (files + subdirectories) a folder may contain. Folders above this are refused
+# outright rather than silently truncated.
+MAX_DOWNLOAD_ENTRIES = 2000
 
 # Split a string into alternating non-digit / digit runs, e.g.
 # "iter_2" -> ["iter_", "2", ""], "run10b" -> ["run", "10", "b"].
@@ -176,3 +186,106 @@ def list_json_files(path: str) -> list[dict]:
 
 def list_videos(path: str, recursive: bool = False) -> list[dict]:
     return _list_media(path, VIDEO_EXTENSIONS, recursive)
+
+
+def list_all_entries(base: str) -> tuple[list[dict], int, bool]:
+    """Recursively list every entry (files and directories) under ``base``.
+
+    Unlike the media listings this keeps hidden entries and non-media files so a
+    folder can be reproduced verbatim by the client. ``rel`` is the path relative
+    to ``base`` with posix separators; ``is_dir`` marks directories (including
+    empty ones, so they can be recreated).
+
+    Symlinks are skipped entirely: they may point outside the access root or
+    introduce cycles.
+
+    Returns ``(entries, total, too_many)`` where ``total`` is the true number of
+    entries in the whole tree. When it exceeds ``MAX_DOWNLOAD_ENTRIES`` only the
+    first ``MAX_DOWNLOAD_ENTRIES`` entries are collected (``too_many`` is
+    ``True``) so a huge tree cannot produce an unbounded payload; the count
+    itself is always complete so the UI can report the real total.
+    """
+    entries: list[dict] = []
+    total = 0
+    # Explicit stack (abs_dir, rel_dir) instead of os.walk so symlinked dirs are
+    # never descended into.
+    stack: list[tuple[str, str]] = [(base, "")]
+    while stack:
+        abs_dir, rel_dir = stack.pop()
+        try:
+            with os.scandir(abs_dir) as it:
+                children = list(it)
+        except PermissionError:
+            raise
+
+        dir_children: list[tuple[str, str]] = []
+        for entry in children:
+            try:
+                if entry.is_symlink():
+                    continue
+                is_dir = entry.is_dir()
+            except OSError:
+                continue
+            rel = f"{rel_dir}/{entry.name}" if rel_dir else entry.name
+            total += 1
+            # Collect only the first ``MAX_DOWNLOAD_ENTRIES`` entries; keep
+            # walking so ``total`` reflects the real count.
+            if len(entries) < MAX_DOWNLOAD_ENTRIES:
+                entries.append({"rel": rel, "path": entry.path, "is_dir": is_dir})
+            if is_dir:
+                dir_children.append((entry.path, rel))
+
+        dir_children.sort(key=lambda x: natural_sort_key(x[1]))
+        stack.extend(reversed(dir_children))
+
+    if total > MAX_DOWNLOAD_ENTRIES:
+        return [], total, True
+    entries.sort(key=lambda x: natural_sort_key(x["rel"]))
+    return entries, total, False
+
+
+def create_zip_archive(base: str, dest_zip: str, on_entry=None) -> None:
+    """Zip the contents of ``base`` into ``dest_zip`` (a temp file).
+
+    Entries are stored under a top-level directory named after ``base`` so
+    extracting the archive reproduces the original folder verbatim. Hidden
+    entries and empty directories are included; symlinks are skipped (they may
+    point outside the access root or form cycles).
+
+    ``on_entry`` (if given) is called once per entry written, so callers can
+    report progress. It may raise to abort the archive.
+
+    Compression method follows ``config.ZIP_COMPRESSION`` (default ``store``):
+    media files are already compressed, so storing them verbatim is ~10x faster
+    while barely changing the archive size.
+    """
+    method = (
+        zipfile.ZIP_DEFLATED if ZIP_COMPRESSION == "deflate" else zipfile.ZIP_STORED
+    )
+    root_name = os.path.basename(os.path.normpath(base)) or "download"
+    with zipfile.ZipFile(dest_zip, "w", method) as zf:
+        for dirpath, dirnames, filenames in os.walk(base, followlinks=False):
+            dirnames[:] = sorted(
+                (
+                    d
+                    for d in dirnames
+                    if not os.path.islink(os.path.join(dirpath, d))
+                ),
+                key=natural_sort_key,
+            )
+            rel = os.path.relpath(dirpath, base)
+            arc_dir = (
+                root_name if rel == "." else f"{root_name}/{rel.replace(os.sep, '/')}"
+            )
+            if rel != ".":
+                # Store the directory entry itself so empty dirs survive.
+                zf.writestr(arc_dir + "/", b"")
+                if on_entry is not None:
+                    on_entry()
+            for name in sorted(filenames, key=natural_sort_key):
+                full = os.path.join(dirpath, name)
+                if os.path.islink(full):
+                    continue
+                zf.write(full, f"{arc_dir}/{name}")
+                if on_entry is not None:
+                    on_entry()

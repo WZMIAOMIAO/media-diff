@@ -4,6 +4,7 @@ import type { VideoFolderTreeApi } from '../../hooks/video/useVideoFolderTree';
 import type { VideoTreeNode } from '../../types/video';
 import { getRelativePath, toForwardSlashes } from '../../utils/path';
 import { copyText } from '../../utils/clipboard';
+import { downloadFile, downloadFolder } from '../../utils/download';
 import { useI18n } from '../../i18n';
 import VideoTreeNodeItem from './VideoTreeNodeItem';
 
@@ -19,13 +20,20 @@ interface ContextMenuState {
   node: VideoTreeNode;
 }
 
-type MenuItem = 'add' | 'refresh' | 'copyAbs' | 'copyRel';
+type MenuItem = 'add' | 'refresh' | 'download' | 'copyAbs' | 'copyRel';
 
-const MENU_ITEMS: MenuItem[] = ['add', 'refresh', 'copyAbs', 'copyRel'];
+const MENU_ITEMS: MenuItem[] = [
+  'add',
+  'refresh',
+  'download',
+  'copyAbs',
+  'copyRel',
+];
 
 const MENU_LABEL: Record<MenuItem, string> = {
   add: 'tree.menu.add',
   refresh: 'tree.menu.refresh',
+  download: 'tree.menu.download',
   copyAbs: 'tree.menu.copyAbs',
   copyRel: 'tree.menu.copyRel',
 };
@@ -75,6 +83,14 @@ function VideoFolderTree({ tree, onAddToCompare, onSelectVideo }: VideoFolderTre
       void onAddToCompare(folderPath);
     } else if (item === 'refresh') {
       void tree.refreshNode(folderPath);
+    } else if (item === 'download') {
+      // Download targets the node itself (a video file downloads directly; a
+      // folder is zipped), not the containing folder.
+      if (node.isDir) {
+        void downloadFolder(node.path);
+      } else {
+        void downloadFile(node.path);
+      }
     } else if (item === 'copyAbs') {
       void copyText(toForwardSlashes(node.path));
     } else if (item === 'copyRel') {

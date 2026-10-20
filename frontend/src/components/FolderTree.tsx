@@ -4,6 +4,7 @@ import type { FolderTreeApi } from '../hooks/useFolderTree';
 import type { TreeNode } from '../types';
 import { getRelativePath, toForwardSlashes } from '../utils/path';
 import { copyText } from '../utils/clipboard';
+import { downloadFile, downloadFolder } from '../utils/download';
 import { useI18n } from '../i18n';
 import TreeNodeItem from './TreeNodeItem';
 
@@ -18,13 +19,20 @@ interface ContextMenuState {
   node: TreeNode;
 }
 
-type MenuItem = 'add' | 'refresh' | 'copyAbs' | 'copyRel';
+type MenuItem = 'add' | 'refresh' | 'download' | 'copyAbs' | 'copyRel';
 
-const MENU_ITEMS: MenuItem[] = ['add', 'refresh', 'copyAbs', 'copyRel'];
+const MENU_ITEMS: MenuItem[] = [
+  'add',
+  'refresh',
+  'download',
+  'copyAbs',
+  'copyRel',
+];
 
 const MENU_LABEL: Record<MenuItem, string> = {
   add: 'tree.menu.add',
   refresh: 'tree.menu.refresh',
+  download: 'tree.menu.download',
   copyAbs: 'tree.menu.copyAbs',
   copyRel: 'tree.menu.copyRel',
 };
@@ -62,6 +70,12 @@ function FolderTree({ tree, onAddToCompare }: FolderTreeProps) {
       void onAddToCompare(node.path);
     } else if (item === 'refresh') {
       void tree.refreshNode(node.path);
+    } else if (item === 'download') {
+      if (node.isDir) {
+        void downloadFolder(node.path);
+      } else {
+        void downloadFile(node.path);
+      }
     } else if (item === 'copyAbs') {
       void copyText(toForwardSlashes(node.path));
     } else if (item === 'copyRel') {

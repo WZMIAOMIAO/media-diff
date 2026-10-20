@@ -47,9 +47,20 @@ export const zh: Dict = {
   // folder tree
   'tree.menu.add': '添加到多目录对比',
   'tree.menu.refresh': '刷新',
+  'tree.menu.download': '下载',
   'tree.menu.copyAbs': '复制绝对路径',
   'tree.menu.copyRel': '复制相对路径',
   'tree.empty': '请输入文件夹路径添加根目录',
+
+  // download
+  'download.title': '下载',
+  'download.compressing': '正在压缩，请稍候…',
+  'download.compressingName': '正在压缩 {name}…',
+  'download.entries': '已处理 {done}/{total} 个条目',
+  'download.cancelled': '已取消',
+  'download.closeConfirm': '压缩尚未完成，确定关闭吗？',
+  'download.tooMany': '文件夹内条目超过 2000 个（共 {count} 个），已禁止下载',
+  'download.error': '下载失败',
 
   // folder input
   'folderInput.placeholder': '输入文件夹路径后回车...',
@@ -296,9 +307,21 @@ export const en: Dict = {
   // folder tree
   'tree.menu.add': 'Add to compare',
   'tree.menu.refresh': 'Refresh',
+  'tree.menu.download': 'Download',
   'tree.menu.copyAbs': 'Copy absolute path',
   'tree.menu.copyRel': 'Copy relative path',
   'tree.empty': 'Enter a folder path to add a root',
+
+  // download
+  'download.title': 'Download',
+  'download.compressing': 'Compressing, please wait…',
+  'download.compressingName': 'Compressing {name}…',
+  'download.entries': '{done}/{total} entries',
+  'download.cancelled': 'Cancelled',
+  'download.closeConfirm': 'Compression is not finished. Close anyway?',
+  'download.tooMany':
+    'The folder has more than 2000 entries ({count}); download is disabled',
+  'download.error': 'Download failed',
 
   // folder input
   'folderInput.placeholder': 'Type a folder path and press Enter...',

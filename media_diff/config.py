@@ -65,6 +65,11 @@ PROBE_CONCURRENCY = _env_int("MEDIA_DIFF_PROBE_CONCURRENCY", 2)
 
 VIDEO_TRANSCODE_CACHE_DIR = "_video_transcode_cache"
 
+# 文件夹下载打包用的 zip 压缩方式：store（默认，仅存储、速度最快，媒体文件本就
+# 已压缩、再压缩几乎不减小体积）或 deflate（压缩更小但慢约 10 倍，适合纯文本目录）。
+# 环境变量 MEDIA_DIFF_ZIP_COMPRESSION=store|deflate 可覆盖。
+ZIP_COMPRESSION = os.environ.get("MEDIA_DIFF_ZIP_COMPRESSION", "store").strip().lower()
+
 # 同步端点（图片缩略图/直方图、文件系统列举等 FastAPI `def` 处理器）共用的
 # 线程池上限。默认 40 在并发用户多时容易被占满，导致连健康检查这类轻请求也排
 # 队超时；适当调大以提升并发。异步视频端点用各自的 ffmpeg 进程池，不受此限。
