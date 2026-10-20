@@ -14,8 +14,12 @@ function TreeNodeItem({ node, depth, onToggle, onContextMenu, onRemoveRoot }: Tr
   const { t } = useI18n();
   const isDir = node.isDir;
   const isRoot = depth === 0;
-  const showArrow = isDir && node.hasChildren === true;
-  const isLeafDir = isDir && node.hasChildren === false;
+  // Show the expand arrow for directories that have children OR are not yet
+  // loaded. The backend's has_children only counts subdirectories, so a folder
+  // containing only image files would otherwise be unexpandable (its images
+  // could never be revealed). Mirrors VideoTreeNodeItem.
+  const showArrow = isDir && (node.hasChildren === true || !node.loaded);
+  const isLeafDir = isDir && node.hasChildren === false && node.loaded;
   const indent = depth * 14;
 
   const handleContextMenu = (e: ReactMouseEvent) => {
