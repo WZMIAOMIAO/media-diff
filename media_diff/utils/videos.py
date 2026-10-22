@@ -436,6 +436,13 @@ def extract_frame(path: str, frame_no: int, fps: Optional[float] = None) -> byte
         "-ss", f"{t:.3f}",
         "-i", path,
         "-frames:v", "1",
+        # Force the frame through RGB before JPEG. ffmpeg otherwise converts
+        # YUV->YUV and keeps the *source* color matrix (e.g. BT.709) in the
+        # JPEG, but JPEG/JFIF has no matrix tag and every decoder assumes
+        # BT.601, which silently desaturated the frame ~5% versus playback.
+        # Converting to RGB first makes the mjpeg encoder emit BT.601, so the
+        # browser reconstructs the correct colors.
+        "-vf", "format=rgb24",
         "-q:v", "2",
         "-f", "image2pipe",
         "-vcodec", "mjpeg",
@@ -447,7 +454,7 @@ def extract_frame(path: str, frame_no: int, fps: Optional[float] = None) -> byte
         mid_t = (duration / 2) if duration > 0 else 0.0
         cmd2 = [
             FFMPEG_BIN, "-y", "-ss", f"{mid_t:.3f}", "-i", path,
-            "-frames:v", "1", "-q:v", "2",
+            "-frames:v", "1", "-vf", "format=rgb24", "-q:v", "2",
             "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1",
         ]
         out = _run(cmd2, timeout=30.0)
@@ -551,6 +558,8 @@ def make_video_thumbnail(path: str, size: int = 200) -> tuple[bytes, str]:
         "-ss", f"{t:.3f}",
         "-i", path,
         "-frames:v", "1",
+        # See extract_frame(): go through RGB so the mjpeg carries BT.601.
+        "-vf", "format=rgb24",
         "-f", "image2pipe",
         "-vcodec", "mjpeg",
         "pipe:1",
@@ -560,7 +569,8 @@ def make_video_thumbnail(path: str, size: int = 200) -> tuple[bytes, str]:
         # Fallback to the first frame if the mid-point seek yielded nothing.
         cmd0 = [
             FFMPEG_BIN, "-y", "-i", path,
-            "-frames:v", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1",
+            "-frames:v", "1", "-vf", "format=rgb24",
+            "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1",
         ]
         jpeg_bytes = _run(cmd0, timeout=30.0)
         if not jpeg_bytes:
