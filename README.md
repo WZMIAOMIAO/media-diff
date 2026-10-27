@@ -1,4 +1,4 @@
-# Media Diff
+# Media Diff <img src="assets/screenshots/logo.jpeg" alt="logo" height="26" />
 
 > 本项目代码全部由 GLM5.2 和 DeepseekV4.1Flash 开发。
 
