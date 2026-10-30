@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MouseEvent as ReactMouseEvent } from 'react';
 import { browseFolder, getRoots, type FileEntry, type SubDir } from '../api';
 import { useI18n } from '../i18n';
 
@@ -136,15 +135,16 @@ function BrowseFolderDialog({
     }
   };
 
-  const handleBackdropClick = (e: ReactMouseEvent) => {
-    if (e.target === e.currentTarget) onClose();
-  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onClick={handleBackdropClick}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="w-[560px] h-[420px] flex flex-col bg-[#2b2b2b] border border-[#3c3c3c] rounded-lg shadow-xl">
         <div className="flex items-center gap-2 p-2 border-b border-[#3c3c3c]">
           <button
