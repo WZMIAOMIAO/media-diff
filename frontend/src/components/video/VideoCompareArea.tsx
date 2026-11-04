@@ -13,6 +13,35 @@ import { useI18n } from '../../i18n';
 
 const PREFETCH_RANGE = 3;
 
+// Only text-editable widgets should swallow the global player shortcuts. Other
+// focusable controls (the progress <input type="range">, checkboxes, buttons…)
+// must keep letting a/d/arrows/space through, otherwise a/d stop working after
+// the user drags the progress bar (it keeps focus and becomes the key target).
+const TEXT_ENTRY_INPUT_TYPES = new Set([
+  'text',
+  'search',
+  'password',
+  'email',
+  'url',
+  'tel',
+  'number',
+  'date',
+  'datetime-local',
+  'month',
+  'time',
+  'week',
+]);
+
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  if (el.tagName === 'TEXTAREA' || el.isContentEditable) return true;
+  return (
+    el.tagName === 'INPUT' &&
+    TEXT_ENTRY_INPUT_TYPES.has((el as HTMLInputElement).type)
+  );
+}
+
 interface VideoCompareAreaProps {
   compare: UseVideoCompareReturn;
   player: VideoPlayerApi;
@@ -57,8 +86,7 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
   const { stepFrame, togglePlay, isPlaying } = player;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (isTextEntryTarget(e.target)) return;
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
         prevVideo();
