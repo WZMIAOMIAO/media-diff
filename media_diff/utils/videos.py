@@ -413,28 +413,54 @@ def browser_playable_cached(path: str) -> Optional[bool]:
     return bool(cached["info"].get("browser_playable", True))
 
 
-def extract_frame(path: str, frame_no: int, fps: Optional[float] = None) -> bytes:
-    """Extract a single frame as JPEG bytes via ffmpeg.
+def _seek_margin(fps: float) -> float:
+    """How far before ``duration`` a seek target must stay.
 
-    frame_no is 1-based. Uses -ss (fast seek) before -i for speed.
-    The seek time is clamped to the video duration to avoid seeking past EOF
-    (which returns empty output / 500 errors when frame_no exceeds the
-    actual frame count of a given video).
+    1.5 frame periods: the last frame's timestamp is ~``duration - 1/fps``, so
+    clamping to ``duration - 1.5/fps`` keeps the seek between the last two
+    frames and still resolves to the last frame, while leaving the second-to-
+    last frame untouched. Must scale with fps in *both* directions: a flat
+    0.05s was too small for fps < 20 (seek past the last frame) and too *large*
+    for high fps (at 120fps it clamped ~6 frames and returned earlier ones).
     """
-    info = get_video_info(path)
-    if fps is None or fps <= 0:
-        fps = info["fps"] or 30.0
-    t = max(0.0, (frame_no - 1) / fps)
-    # Clamp t within the valid range so that frame_no larger than the video's
-    # actual frame count still yields the last frame instead of failing.
-    duration = info.get("duration") or 0.0
-    if duration > 0:
-        t = min(t, max(0.0, duration - 0.05))
+    return max(1e-4, 1.5 / fps) if fps > 0 else 0.05
+
+
+# ffmpeg's way of saying "that seek produced no frame" (varies by version).
+# Only these are retried: retrying decode/unsupported-codec/timeout errors would
+# both slow things down and risk silently substituting a different frame.
+_NO_FRAME_ERROR_MARKERS = (
+    "could not open encoder before eof",
+    "nothing was written",
+    "output file is empty",
+    "no filtered frames",
+)
+
+
+def _is_no_frame_error(exc: FFmpegError) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in _NO_FRAME_ERROR_MARKERS)
+
+
+def _extract_jpeg_at(
+    path: str, t: float, fps: Optional[float] = None
+) -> bytes:
+    # Seek a hair *before* the target frame. ``-ss`` drops frames whose PTS is
+    # < the seek time, so formatting e.g. 10/15 = 0.6666... as "%.3f" -> 0.667
+    # (rounded UP) skips the target frame and returns the *next* one - an
+    # off-by-one for roughly half of all frames, and an empty result (or -22 on
+    # ffmpeg 7) when the target is the last frame. Keep the lead below one frame
+    # period so we never fall back to the previous frame (fps > 250 included).
+    lead = min(0.001, 0.25 / fps) if fps and fps > 0 else 0.001
+    seek_t = max(0.0, t - lead)
     cmd = [
         FFMPEG_BIN,
         "-y",
-        "-ss", f"{t:.3f}",
+        "-ss", f"{seek_t:.6f}",
         "-i", path,
+        "-an",
+        "-sn",
+        "-dn",
         "-frames:v", "1",
         # Force the frame through RGB before JPEG. ffmpeg otherwise converts
         # YUV->YUV and keeps the *source* color matrix (e.g. BT.709) in the
@@ -448,19 +474,64 @@ def extract_frame(path: str, frame_no: int, fps: Optional[float] = None) -> byte
         "-vcodec", "mjpeg",
         "pipe:1",
     ]
-    out = _run(cmd, timeout=30.0)
-    if not out:
-        # Fallback: seek to mid-point if clamped seek returned nothing.
-        mid_t = (duration / 2) if duration > 0 else 0.0
-        cmd2 = [
-            FFMPEG_BIN, "-y", "-ss", f"{mid_t:.3f}", "-i", path,
-            "-frames:v", "1", "-vf", "format=rgb24", "-q:v", "2",
-            "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1",
-        ]
-        out = _run(cmd2, timeout=30.0)
-        if not out:
-            raise FFmpegError("抽帧返回空数据（视频可能损坏）")
-    return out
+    return _run(cmd, timeout=30.0)
+
+
+def extract_frame(path: str, frame_no: int, fps: Optional[float] = None) -> bytes:
+    """Extract a single frame as JPEG bytes via ffmpeg.
+
+    frame_no is 1-based. Uses -ss (fast seek) before -i for speed.
+
+    ``frame_count`` is estimated from ``duration * fps`` when the container has
+    no ``nb_frames``, so the last frames (and the +/- prefetch around them) can
+    point past the real end. A seek past EOF behaves differently across ffmpeg
+    builds: some exit 0 with empty output, ffmpeg 7 instead fails with -22
+    "Could not open encoder before EOF". Both are handled by stepping back a
+    *bounded* number of frames. We deliberately do not fall back to the
+    mid-point/first frame: those can be wildly wrong for the requested index and
+    would be cached under it.
+    """
+    info = get_video_info(path)
+    if fps is None or fps <= 0:
+        fps = info["fps"] or 30.0
+    duration = info.get("duration") or 0.0
+    frame_count = info.get("frame_count") or 0
+
+    t = max(0.0, (frame_no - 1) / fps)
+    if frame_count > 0:
+        # Clamp to the *declared* last frame, not to ``duration``: when the
+        # container duration is a little short (e.g. 3.19s for 383 frames at
+        # 119.88fps) a duration-based margin lands on the second-to-last frame.
+        # Valid indices are unchanged; out-of-range ones (the +/- prefetch at
+        # the end) map to the last frame here and step back below if it is
+        # itself past the real end.
+        t = min(t, max(0.0, (frame_count - 1) / fps))
+    elif duration > 0:
+        t = min(t, max(0.0, duration - _seek_margin(fps)))
+
+    attempts: list[float] = [t]
+    if fps > 0:
+        attempts += [max(0.0, t - n / fps) for n in (1, 2, 3, 5, 8)]
+
+    last_error: Optional[FFmpegError] = None
+    tried: set[float] = set()
+    for at in attempts:
+        key = round(at, 6)
+        if key in tried:
+            continue
+        tried.add(key)
+        try:
+            out = _extract_jpeg_at(path, at, fps)
+        except FFmpegError as exc:
+            if not _is_no_frame_error(exc):
+                raise
+            last_error = exc
+            continue
+        if out:
+            return out
+    raise FFmpegError(
+        str(last_error) if last_error else "抽帧返回空数据（视频可能损坏）"
+    )
 
 
 # Bound concurrent ffmpeg frame extractions and de-duplicate identical
@@ -548,33 +619,27 @@ def make_video_thumbnail(path: str, size: int = 200) -> tuple[bytes, str]:
 
     info = get_video_info(path)
     duration = info["duration"] or 0.0
+    fps = info["fps"] or 0.0
     t = duration / 2 if duration > 0 else 0.0
     if duration > 0:
-        t = min(t, max(0.0, duration - 0.05))
+        t = min(t, max(0.0, duration - _seek_margin(fps)))
 
-    cmd = [
-        FFMPEG_BIN,
-        "-y",
-        "-ss", f"{t:.3f}",
-        "-i", path,
-        "-frames:v", "1",
-        # See extract_frame(): go through RGB so the mjpeg carries BT.601.
-        "-vf", "format=rgb24",
-        "-f", "image2pipe",
-        "-vcodec", "mjpeg",
-        "pipe:1",
-    ]
-    jpeg_bytes = _run(cmd, timeout=30.0)
+    # Mid-point first, then the first frame. Handle both empty output and a
+    # non-zero ffmpeg exit (e.g. -22 when a seek lands past the last frame).
+    last_error: Optional[FFmpegError] = None
+    jpeg_bytes = b""
+    for at in (t, 0.0):
+        try:
+            jpeg_bytes = _extract_jpeg_at(path, at, fps)
+        except FFmpegError as exc:
+            last_error = exc
+            jpeg_bytes = b""
+        if jpeg_bytes:
+            break
     if not jpeg_bytes:
-        # Fallback to the first frame if the mid-point seek yielded nothing.
-        cmd0 = [
-            FFMPEG_BIN, "-y", "-i", path,
-            "-frames:v", "1", "-vf", "format=rgb24",
-            "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1",
-        ]
-        jpeg_bytes = _run(cmd0, timeout=30.0)
-        if not jpeg_bytes:
-            raise FFmpegError("无法生成视频封面（视频可能损坏）")
+        raise FFmpegError(
+            str(last_error) if last_error else "无法生成视频封面（视频可能损坏）"
+        )
 
     with Image.open(BytesIO(jpeg_bytes)) as img:
         rgb = img.convert("RGB")
