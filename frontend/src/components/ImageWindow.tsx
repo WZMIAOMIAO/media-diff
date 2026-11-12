@@ -18,6 +18,29 @@ interface WindowInfo {
   image: FileEntry | null;
 }
 
+/**
+ * Decode a blob URL off-screen and resolve its intrinsic size. Lets the window
+ * apply the correct fit in the same render that swaps in the new URL, instead
+ * of painting the new image once at the container size ("fill") and then
+ * snapping to its real aspect ratio.
+ */
+function probeImageSize(url: string): Promise<{ w: number; h: number }> {
+  return new Promise((resolve) => {
+    const probe = new Image();
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve({ w: probe.naturalWidth, h: probe.naturalHeight });
+    };
+    probe.onload = finish;
+    probe.onerror = finish;
+    probe.src = url;
+    // Cached images can already be complete before onload is attached.
+    if (probe.complete) finish();
+  });
+}
+
 interface ImageWindowProps {
   index: number;
   folder: SelectedFolder;
@@ -72,17 +95,30 @@ export default function ImageWindow({
   useEffect(() => {
     if (!image?.path) {
       setImageUrl(null);
+      setNaturalSize({ w: 0, h: 0 });
+      setResolution('');
       return;
     }
     let cancelled = false;
     let retries = 0;
     setLoadError(false);
-    setNaturalSize({ w: 0, h: 0 });
+    // Do NOT reset naturalSize here: the previous image (and its known size)
+    // stays on screen until the new blob is decoded, then URL + size are
+    // swapped together. Resetting early made the window render one frame with
+    // no explicit fit size (the "fills the container then scales" flicker).
     const load = () => {
       if (cancelled) return;
       fetchImageBlob(image.path)
-        .then((url) => {
+        .then(async (url) => {
           if (cancelled) return;
+          const size = await probeImageSize(url);
+          if (cancelled) return;
+          // Batch with setImageUrl so the first paint of the new image already
+          // has the correct aspect ratio / fit size.
+          if (size.w > 0 && size.h > 0) {
+            setNaturalSize(size);
+            setResolution(`${size.w}×${size.h}`);
+          }
           setImageUrl(url);
           setLoadError(false);
         })

@@ -64,7 +64,7 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
 
   if (selectedFolders.length === 0) {
     return (
-      <main className="flex-1 min-w-0 flex items-center justify-center bg-[#1e1e1e]">
+      <main className="flex-1 min-w-0 min-h-0 flex items-center justify-center bg-[#1e1e1e]">
         <span className="text-sm text-[#888888]">{t('compare.emptyImage')}</span>
       </main>
     );
@@ -134,7 +134,7 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
 
   if (selectedFolders.length === 4) {
     return (
-      <main className="flex-1 min-w-0 grid grid-cols-2 grid-rows-2 gap-px bg-[#3c3c3c]">
+      <main className="flex-1 min-w-0 min-h-0 grid grid-cols-2 grid-rows-2 gap-px bg-[#3c3c3c]">
         {renderWindow(0)}
         {renderWindow(1)}
         {renderWindow(2)}
@@ -144,9 +144,9 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
   }
 
   return (
-    <main className="flex-1 min-w-0 flex gap-px bg-[#3c3c3c]">
+    <main className="flex-1 min-w-0 min-h-0 flex gap-px bg-[#3c3c3c]">
       {selectedFolders.map((_, i) => (
-        <div key={i} className="flex-1 min-w-0">
+        <div key={i} className="flex-1 min-w-0 min-h-0">
           {renderWindow(i)}
         </div>
       ))}
