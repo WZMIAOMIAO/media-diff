@@ -6,6 +6,7 @@ import { getRelativePath, toForwardSlashes } from '../../utils/path';
 import { copyText } from '../../utils/clipboard';
 import { downloadFile, downloadFolder } from '../../utils/download';
 import { useI18n } from '../../i18n';
+import ContextMenu from '../ContextMenu';
 import VideoTreeNodeItem from './VideoTreeNodeItem';
 
 interface VideoFolderTreeProps {
@@ -119,15 +120,7 @@ function VideoFolderTree({ tree, onAddToCompare, onSelectVideo }: VideoFolderTre
       )}
 
       {contextMenu && (
-        <div
-          className="fixed z-50 min-w-[180px] py-1 bg-[#2b2b2b] border border-[#3c3c3c] rounded shadow-lg"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-        >
+        <ContextMenu x={contextMenu.x} y={contextMenu.y}>
           {MENU_ITEMS.map((item) => (
             <div
               key={item}
@@ -144,7 +137,7 @@ function VideoFolderTree({ tree, onAddToCompare, onSelectVideo }: VideoFolderTre
               {t(MENU_LABEL[item])}
             </div>
           ))}
-        </div>
+        </ContextMenu>
       )}
     </div>
   );
