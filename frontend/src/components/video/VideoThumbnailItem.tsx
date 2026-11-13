@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fetchVideoThumbnail } from '../../api/video';
 import { useI18n } from '../../i18n';
 import type { VideoEntry } from '../../types/video';
@@ -6,29 +6,48 @@ import type { VideoEntry } from '../../types/video';
 interface VideoThumbnailItemProps {
   video: VideoEntry;
   selected: boolean;
+  /** True while the column is scrolling: defer expensive extraction until idle. */
+  loadPaused?: boolean;
   onClick: (e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) => void;
 }
 
-function VideoThumbnailItem({ video, selected, onClick }: VideoThumbnailItemProps) {
+function VideoThumbnailItem({ video, selected, loadPaused = false, onClick }: VideoThumbnailItemProps) {
   const { t } = useI18n();
   const [url, setUrl] = useState<string | null>(null);
+  // Path whose blob URL is currently in ``url`` (null when not loaded). Letting
+  // a paused render keep the existing picture avoids flicker when scrolling
+  // stops over an already-loaded row.
+  const loadedPathRef = useRef<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
     if (video.missing) {
+      loadedPathRef.current = null;
       setUrl(null);
       return;
     }
-    setUrl(null);
-    fetchVideoThumbnail(video.path)
+    if (loadedPathRef.current !== video.path) {
+      loadedPathRef.current = null;
+      setUrl(null);
+    }
+    // While the user is scrolling, don't start (or keep) extraction work: a
+    // fast drag mounts and unmounts hundreds of rows, and each request would
+    // otherwise queue behind the others. Load after the scroll goes idle.
+    if (loadPaused || loadedPathRef.current === video.path) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+    fetchVideoThumbnail(video.path, 200, { signal: controller.signal })
       .then(({ blobUrl }) => {
-        if (!cancelled) setUrl(blobUrl);
+        if (cancelled) return;
+        loadedPathRef.current = video.path;
+        setUrl(blobUrl);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [video.path, video.missing]);
+  }, [video.path, video.missing, loadPaused]);
 
   if (video.missing) {
     return (

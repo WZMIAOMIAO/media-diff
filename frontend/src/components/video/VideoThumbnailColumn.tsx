@@ -24,6 +24,11 @@ interface VideoThumbnailColumnProps {
 
 const ITEM_HEIGHT = 220;
 const BUFFER = 3;
+// Thumbnails are extracted by ffmpeg on the server (~100ms+ each). Starting a
+// request for every row that flashes by during a fast drag floods the executor
+// and makes the row the user stops on wait behind hundreds of stale requests.
+// Keep the existing pictures while scrolling and only fetch after it settles.
+const SCROLL_IDLE_MS = 150;
 
 function VideoThumbnailColumn({
   folder,
@@ -39,9 +44,19 @@ function VideoThumbnailColumn({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportH, setViewportH] = useState(0);
+  const [scrolling, setScrolling] = useState(false);
+  const scrollIdleRef = useRef<number | null>(null);
   // Intended scroll offset; lets us repair the browser resetting scrollTop to 0
   // when React moves this column's DOM node on reorder (no scroll event fires).
   const desiredScrollRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      if (scrollIdleRef.current !== null) {
+        window.clearTimeout(scrollIdleRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -95,6 +110,14 @@ function VideoThumbnailColumn({
   const onScroll = (e: UIEvent<HTMLDivElement>) => {
     desiredScrollRef.current = e.currentTarget.scrollTop;
     setScrollTop(e.currentTarget.scrollTop);
+    setScrolling(true);
+    if (scrollIdleRef.current !== null) {
+      window.clearTimeout(scrollIdleRef.current);
+    }
+    scrollIdleRef.current = window.setTimeout(() => {
+      scrollIdleRef.current = null;
+      setScrolling(false);
+    }, SCROLL_IDLE_MS);
   };
 
   const total = videos.length;
@@ -140,6 +163,7 @@ function VideoThumbnailColumn({
                   <VideoThumbnailItem
                     video={vid}
                     selected={idx === currentIndex}
+                    loadPaused={scrolling}
                     onClick={(e) => onSelect(idx, e, idx * ITEM_HEIGHT - scrollTop)}
                   />
                 </div>

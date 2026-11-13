@@ -249,39 +249,59 @@ export async function fetchVideoFrameHistogram(
 // ---- thumbnail cache (video cover frames) ----
 
 const _thumbCache = new LruCache<string, FrameEntry>(VIDEO_THUMB_CACHE_MAX);
-const _thumbInflight = new Map<string, Promise<FrameEntry>>();
+const _thumbInflight = new Map<
+  string,
+  { promise: Promise<FrameEntry>; controller: AbortController }
+>();
 
 export async function fetchVideoThumbnail(
   path: string,
   size = 200,
+  options?: { signal?: AbortSignal },
 ): Promise<FrameEntry> {
   const key = `${path}@${size}`;
   const cached = _thumbCache.get(key);
   if (cached) return cached;
-  const inflight = _thumbInflight.get(key);
-  if (inflight) return inflight;
-  const promise = (async () => {
-    try {
-      const res = await fetch(
-        `${API_BASE}/videos/thumbnail?path=${encodeURIComponent(path)}&size=${size}`,
-      );
-      if (!res.ok) throw new Error(`${t('api.videoThumbFailed')}: ${path}`);
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const histogram = parseHistogramHeader(res.headers.get('X-Histogram'));
-      const entry: FrameEntry = { blobUrl, histogram };
-      const previous = _thumbCache.peek(key);
-      if (previous) URL.revokeObjectURL(previous.blobUrl);
-      _thumbCache.set(key, entry);
-      for (const [, dropped] of _thumbCache.trim()) {
-        URL.revokeObjectURL(dropped.blobUrl);
+  let inflight = _thumbInflight.get(key);
+  if (!inflight) {
+    const controller = new AbortController();
+    const promise = (async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE}/videos/thumbnail?path=${encodeURIComponent(path)}&size=${size}`,
+          { signal: controller.signal },
+        );
+        if (!res.ok) throw new Error(`${t('api.videoThumbFailed')}: ${path}`);
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const histogram = parseHistogramHeader(res.headers.get('X-Histogram'));
+        const entry: FrameEntry = { blobUrl, histogram };
+        const previous = _thumbCache.peek(key);
+        if (previous) URL.revokeObjectURL(previous.blobUrl);
+        _thumbCache.set(key, entry);
+        for (const [, dropped] of _thumbCache.trim()) {
+          URL.revokeObjectURL(dropped.blobUrl);
+        }
+        return entry;
+      } finally {
+        if (_thumbInflight.get(key)?.controller === controller) {
+          _thumbInflight.delete(key);
+        }
       }
-      return entry;
-    } finally {
-      _thumbInflight.delete(key);
-    }
-  })();
-  _thumbInflight.set(key, promise);
+    })();
+    inflight = { promise, controller };
+    _thumbInflight.set(key, inflight);
+  }
+
+  // A caller that unmounts (fast scroll) cancels the shared request, freeing
+  // the browser connection instead of leaving it queued behind hundreds of
+  // other thumbnails that are no longer visible.
+  const { promise, controller } = inflight;
+  const signal = options?.signal;
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
   return promise;
 }
 

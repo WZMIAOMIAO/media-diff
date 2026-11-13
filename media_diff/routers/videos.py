@@ -1,7 +1,7 @@
 import logging
 import os
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from media_diff.config import THUMBNAIL_DEFAULT_SIZE, VIDEO_EXTENSIONS
@@ -176,6 +176,7 @@ async def video_frame(
 
 @router.get("/thumbnail")
 async def video_thumbnail(
+    request: Request,
     path: str = Query(..., description="视频文件绝对路径"),
     size: int = Query(
         THUMBNAIL_DEFAULT_SIZE, ge=1, le=4096, description="缩略图最大边像素数"
@@ -185,6 +186,12 @@ async def video_thumbnail(
         normalized = _validate_video_path(path)
     except PermissionError:
         raise HTTPException(status_code=403, detail="无权限访问该路径")
+
+    # Thumbnail extraction is comparatively expensive (probe + ffmpeg seek).
+    # Fast scrolling cancels requests client-side; skip the work for clients
+    # that already went away instead of filling the bounded executor with them.
+    if await request.is_disconnected():
+        return Response(status_code=499)
 
     try:
         jpeg_bytes, histogram_b64 = await pool.run_ffmpeg(

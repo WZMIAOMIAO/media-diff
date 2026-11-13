@@ -238,6 +238,28 @@ describe('full-size image cache', () => {
 });
 
 describe('video thumbnail cache', () => {
+  it('aborts the shared request when a caller signal aborts', async () => {
+    let requestSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        requestSignal = init?.signal ?? undefined;
+        return new Promise<Response>((_resolve, reject) => {
+          requestSignal?.addEventListener('abort', () =>
+            reject(new DOMException('aborted', 'AbortError')),
+          );
+        });
+      }),
+    );
+    const controller = new AbortController();
+    const promise = videoApi.fetchVideoThumbnail('/v/A/slow.mp4', 200, {
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(promise).rejects.toThrow(/abort/i);
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
   it('caps entries with LRU eviction', async () => {
     const first = '/v/A/0.mp4';
     await videoApi.fetchVideoThumbnail(first);
