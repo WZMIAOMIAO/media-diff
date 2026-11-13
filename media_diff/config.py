@@ -1,9 +1,18 @@
 import os
 
 
-# 访问根目录（沙箱）：设置后仅允许浏览/读取该目录及其子目录，空值表示不限制。
-# 由 CLI --root 或环境变量 MEDIA_DIFF_ROOT 设置。
-ACCESS_ROOT = os.environ.get("MEDIA_DIFF_ROOT") or None
+def _parse_roots(raw: str | None) -> list[str]:
+    """Split ``MEDIA_DIFF_ROOT`` into one or more roots (``os.pathsep``)."""
+    if not raw:
+        return []
+    return [part.strip() for part in raw.split(os.pathsep) if part.strip()]
+
+
+# 访问根目录（沙箱）：设置后仅允许浏览/读取这些目录及其子目录，空列表表示不限制。
+# 由 CLI --root（可重复）或环境变量 MEDIA_DIFF_ROOT（可用 os.pathsep 分隔多个）设置。
+ACCESS_ROOTS: list[str] = _parse_roots(os.environ.get("MEDIA_DIFF_ROOT"))
+# 向后兼容：第一个根目录（/health 等旧代码使用）。
+ACCESS_ROOT = ACCESS_ROOTS[0] if ACCESS_ROOTS else None
 
 
 def _env_int(name: str, default: int) -> int:

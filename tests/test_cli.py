@@ -1,4 +1,5 @@
 import argparse
+import os
 
 from media_diff import cli
 from media_diff.cli import _select_targets
@@ -117,12 +118,57 @@ def test_apply_root_env_sets_env(tmp_path, monkeypatch):
     monkeypatch.delenv("MEDIA_DIFF_ROOT", raising=False)
     root = tmp_path / "data"
     root.mkdir()
-    assert cli._apply_root_env(argparse.Namespace(root=str(root))) is True
+    assert cli._apply_root_env(argparse.Namespace(root=[str(root)])) is True
     assert cli.os.environ["MEDIA_DIFF_ROOT"] == str(root)
 
 
+def test_apply_root_env_multiple_flags(tmp_path, monkeypatch):
+    monkeypatch.delenv("MEDIA_DIFF_ROOT", raising=False)
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    assert (
+        cli._apply_root_env(argparse.Namespace(root=[str(a), str(b)])) is True
+    )
+    assert cli.os.environ["MEDIA_DIFF_ROOT"] == os.pathsep.join([str(a), str(b)])
+
+
+def test_apply_root_env_pathsep_in_one_value(tmp_path, monkeypatch):
+    monkeypatch.delenv("MEDIA_DIFF_ROOT", raising=False)
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    combined = f"{a}{os.pathsep}{b}"
+    assert cli._apply_root_env(argparse.Namespace(root=[combined])) is True
+    assert cli.os.environ["MEDIA_DIFF_ROOT"] == os.pathsep.join([str(a), str(b)])
+
+
+def test_apply_root_env_dedupes(tmp_path, monkeypatch):
+    monkeypatch.delenv("MEDIA_DIFF_ROOT", raising=False)
+    a = tmp_path / "a"
+    a.mkdir()
+    assert (
+        cli._apply_root_env(argparse.Namespace(root=[str(a), str(a)])) is True
+    )
+    assert cli.os.environ["MEDIA_DIFF_ROOT"] == str(a)
+
+
 def test_apply_root_env_rejects_missing(tmp_path, capsys):
-    assert cli._apply_root_env(argparse.Namespace(root=str(tmp_path / "nope"))) is False
+    assert cli._apply_root_env(argparse.Namespace(root=[str(tmp_path / "nope")])) is False
+    assert "not an existing directory" in capsys.readouterr().out
+
+
+def test_apply_root_env_rejects_if_any_missing(tmp_path, capsys):
+    ok = tmp_path / "ok"
+    ok.mkdir()
+    assert (
+        cli._apply_root_env(
+            argparse.Namespace(root=[str(ok), str(tmp_path / "missing")])
+        )
+        is False
+    )
     assert "not an existing directory" in capsys.readouterr().out
 
 
@@ -130,3 +176,11 @@ def test_apply_root_env_noop_when_absent(monkeypatch):
     monkeypatch.delenv("MEDIA_DIFF_ROOT", raising=False)
     assert cli._apply_root_env(argparse.Namespace(root=None)) is True
     assert "MEDIA_DIFF_ROOT" not in cli.os.environ
+
+
+def test_parser_accepts_repeated_root(tmp_path):
+    a = str(tmp_path / "a")
+    b = str(tmp_path / "b")
+    args = cli._build_parser().parse_args(["--root", a, "--root", b])
+    assert args.root == [a, b]
+    assert cli._build_parser().parse_args([]).root is None

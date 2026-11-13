@@ -163,11 +163,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--root",
+        action="append",
         default=None,
         metavar="PATH",
         help=(
-            "Restrict the server to PATH and its subdirectories; the folder "
-            "browser defaults to it (env MEDIA_DIFF_ROOT)"
+            "Restrict the server to PATH and its subdirectories; repeat the "
+            "flag (or use PATH-separated values) to allow several roots. The "
+            "folder browser defaults to the first one (env MEDIA_DIFF_ROOT, "
+            "which may also be PATH-separated)"
         ),
     )
     parser.add_argument(
@@ -428,19 +431,40 @@ def _apply_concurrency_env(args: argparse.Namespace) -> None:
 
 
 def _apply_root_env(args: argparse.Namespace) -> bool:
-    """Forward ``--root`` to ``MEDIA_DIFF_ROOT`` (validated before import).
+    """Forward ``--root`` (repeatable) to ``MEDIA_DIFF_ROOT`` before import.
 
-    Returns ``False`` (after printing a message) when the given path is not an
-    existing directory, so the caller can abort.
+    ``args.root`` is a list because ``--root`` uses ``action="append"``. Each
+    value may itself contain ``os.pathsep``-separated paths, matching the
+    environment-variable form. Returns ``False`` (after printing a message)
+    when any path is not an existing directory, so the caller can abort.
     """
-    root = getattr(args, "root", None)
-    if root is None:
+    raw = getattr(args, "root", None)
+    if not raw:
         return True
-    expanded = os.path.abspath(os.path.expanduser(root))
-    if not os.path.isdir(expanded):
-        print(f"Error: --root is not an existing directory: {root}")
-        return False
-    os.environ["MEDIA_DIFF_ROOT"] = expanded
+    if isinstance(raw, str):
+        raw = [raw]
+    expanded: list[str] = []
+    for entry in raw:
+        for part in str(entry).split(os.pathsep):
+            part = part.strip()
+            if not part:
+                continue
+            path = os.path.abspath(os.path.expanduser(part))
+            if not os.path.isdir(path):
+                print(f"Error: --root is not an existing directory: {part}")
+                return False
+            expanded.append(path)
+
+    # Stable de-duplication so repeated flags do not repeat the same root.
+    roots: list[str] = []
+    seen: set[str] = set()
+    for path in expanded:
+        if path not in seen:
+            seen.add(path)
+            roots.append(path)
+    if not roots:
+        return True
+    os.environ["MEDIA_DIFF_ROOT"] = os.pathsep.join(roots)
     return True
 
 

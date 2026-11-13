@@ -75,19 +75,24 @@ media-diff
 
 ### 限制访问目录（沙箱）
 
-默认不限制访问范围，可读取本机任意路径。若部署在共享环境或只想暴露某个数据集，用 `--root` 指定访问根目录：
+默认不限制访问范围，可读取本机任意路径。若部署在共享环境或只想暴露某些数据集，用 `--root` 指定访问根目录（**可重复**，也可在一个参数里用 `os.pathsep` 分隔，Linux/macOS 为 `:`，Windows 为 `;`）：
 
 ```bash
-media-diff --root /data/dataset
+# 多个根目录：重复传参
+media-diff --root /data/dataset --root /data/another
+
+# 或在一次参数内用 pathsep 分隔（Linux/macOS）
+media-diff --root /data/dataset:/data/another
 ```
 
-- 打开目录（选择文件夹）时**默认指向该根目录**；
-- 只允许浏览/读取该目录**及其子目录**，访问根目录以外的路径一律返回 403（符号链接指向外部同样被拦截）；
-- 也可用环境变量 `MEDIA_DIFF_ROOT` 设置；`--root` 传入的路径不存在会直接报错退出。
+- 打开目录（选择文件夹）时**默认指向第一个根目录**；其余根目录可直接在输入框输入绝对路径添加；
+- 只允许浏览/读取这些目录**及其子目录**，访问所有根目录以外的路径一律返回 403（符号链接指向外部同样被拦截）；
+- 也可用环境变量 `MEDIA_DIFF_ROOT`（同样支持 pathsep 分隔多个）；`--root` 传入的路径有任一不存在会直接报错退出。
 
 ```bash
 # 等价写法
 MEDIA_DIFF_ROOT=/data/dataset media-diff
+MEDIA_DIFF_ROOT=/data/dataset:/data/another media-diff   # 多个根
 ```
 
 也可用模块方式启动：`python -m media_diff`。

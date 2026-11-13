@@ -9,7 +9,7 @@ from media_diff.config import (
     VIDEO_EXTENSIONS,
     ZIP_COMPRESSION,
 )
-from media_diff.utils.security import get_access_root
+from media_diff.utils.security import get_access_roots
 
 # Safety cap for recursive scans so a pathological tree cannot produce an
 # unbounded response. Callers surface truncation via the ``truncated`` flag.
@@ -47,9 +47,9 @@ def natural_sort_key(value: str) -> tuple:
 
 
 def get_roots() -> list[str]:
-    root = get_access_root()
-    if root is not None:
-        return [root]
+    roots = get_access_roots()
+    if roots:
+        return roots
     if sys.platform.startswith("win"):
         roots: list[str] = []
         for letter in string.ascii_uppercase:
@@ -72,9 +72,9 @@ def get_default_browse_path() -> str:
     The Desktop folder name may be localized on some Windows installs, so a
     few common names are tried before falling back to the home directory.
     """
-    root = get_access_root()
-    if root is not None:
-        return root
+    roots = get_access_roots()
+    if roots:
+        return roots[0]
     home = os.path.expanduser("~")
     if sys.platform.startswith("win"):
         for name in ("Desktop", "桌面"):

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { browseFolderVideo } from '../../api/video';
-import { getAccessRoot } from '../../api';
+import { getAccessRoots } from '../../api';
 import { loadTreeRoots, saveTreeRoots } from '../../utils/treeStorage';
-import { isWithinRoot } from '../../utils/path';
+import { isWithinAnyRoot } from '../../utils/path';
 import type {
   AddRootResult,
   VideoBrowseResult,
@@ -85,11 +85,11 @@ export function useVideoFolderTree(storageKey: string): VideoFolderTreeApi {
     }
     hydratedRef.current = true;
     if (changed) forceUpdate();
-    // Drop persisted roots outside a server-configured access root (UI only).
-    getAccessRoot()
-      .then((root) => {
-        if (!root) return;
-        const kept = rootsRef.current.filter((p) => isWithinRoot(p, root));
+    // Drop persisted roots outside all server-configured access roots (UI only).
+    getAccessRoots()
+      .then((roots) => {
+        if (roots.length === 0) return;
+        const kept = rootsRef.current.filter((p) => isWithinAnyRoot(p, roots));
         if (kept.length === rootsRef.current.length) return;
         for (const p of rootsRef.current) {
           if (!kept.includes(p)) treeRef.current.delete(p);

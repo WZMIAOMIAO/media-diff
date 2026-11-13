@@ -2,7 +2,20 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from media_diff import config
 from media_diff.app import app
+
+
+@pytest.fixture(autouse=True)
+def _clear_access_roots(monkeypatch):
+    """Tests start unrestricted; root-specific tests patch config themselves.
+
+    Without this, a developer shell that exports ``MEDIA_DIFF_ROOT`` would make
+    the single-root tests (which patch ``config.ACCESS_ROOT``) silently use the
+    ambient roots instead.
+    """
+    monkeypatch.setattr(config, "ACCESS_ROOTS", [])
+    monkeypatch.setattr(config, "ACCESS_ROOT", None)
 
 
 @pytest.fixture(scope="session")

@@ -39,14 +39,23 @@ export async function getRoots(): Promise<{ roots: string[] }> {
 }
 
 /**
- * Configured access root (sandbox), or ``null`` when unrestricted. Used by the
- * tree to discard persisted roots that fall outside a newly configured root.
+ * Configured access roots (sandbox), or ``[]`` when unrestricted. Used by the
+ * tree to discard persisted roots that fall outside every configured root.
  */
-export async function getAccessRoot(): Promise<string | null> {
+export async function getAccessRoots(): Promise<string[]> {
   const res = await fetch(`${API_BASE}/health`);
-  if (!res.ok) return null;
-  const data = (await res.json()) as { root?: string | null };
-  return typeof data.root === 'string' && data.root ? data.root : null;
+  if (!res.ok) return [];
+  const data = (await res.json()) as {
+    roots?: string[] | null;
+    root?: string | null;
+  };
+  if (Array.isArray(data.roots)) {
+    return data.roots.filter(
+      (r): r is string => typeof r === 'string' && r.length > 0,
+    );
+  }
+  // Back-compat with servers that only report a single root.
+  return typeof data.root === 'string' && data.root ? [data.root] : [];
 }
 
 // Default directory for the folder browser: user home (Linux/macOS) or

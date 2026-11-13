@@ -20,6 +20,11 @@ export function isWithinRoot(path: string, root: string): boolean {
   return p === r || p.startsWith(`${r}/`);
 }
 
+/** Whether ``path`` is inside at least one of ``roots``. */
+export function isWithinAnyRoot(path: string, roots: string[]): boolean {
+  return roots.some((root) => isWithinRoot(path, root));
+}
+
 function getPathName(path: string): string {
   if (!path) return '';
   if (path === '/') return '/';

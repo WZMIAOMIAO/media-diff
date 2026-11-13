@@ -38,7 +38,7 @@ async def _lifespan(_app: FastAPI):
 def create_app() -> FastAPI:
     """Build and configure the FastAPI application."""
     # Fail fast when a sandbox root is configured but invalid.
-    from media_diff.utils.security import validate_access_root
+    from media_diff.utils.security import get_access_roots, validate_access_root
 
     validate_access_root()
 
@@ -75,13 +75,16 @@ def create_app() -> FastAPI:
             threads = anyio.to_thread.current_default_thread_limiter().total_tokens
         except Exception:
             threads = config.SYNC_THREAD_LIMIT
+        roots = get_access_roots()
         return {
             "status": "ok",
             "service": "media-diff",
             "pid": os.getpid(),
             "version": __version__,
-            # Configured access root (sandbox); None means unrestricted.
-            "root": config.ACCESS_ROOT or None,
+            # Configured access roots (sandbox); empty means unrestricted.
+            "roots": roots,
+            # Back-compat for older clients: first root, or None.
+            "root": roots[0] if roots else None,
             # Exposed so deployments can confirm the configured concurrency.
             "concurrency": {
                 "extract": config.EXTRACT_CONCURRENCY,

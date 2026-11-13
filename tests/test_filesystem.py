@@ -10,6 +10,54 @@ def test_home(client):
     assert res.json()["path"]
 
 
+def test_multiple_access_roots(client, tmp_path, monkeypatch):
+    import os
+
+    from media_diff import config
+
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    real_a = os.path.realpath(str(a))
+    real_b = os.path.realpath(str(b))
+    monkeypatch.setattr(config, "ACCESS_ROOTS", [str(a), str(b)])
+    monkeypatch.setattr(config, "ACCESS_ROOT", None)
+
+    assert client.get("/api/filesystem/roots").json()["roots"] == [real_a, real_b]
+    # The browser starts at the first root.
+    assert client.get("/api/filesystem/home").json()["path"] == real_a
+    # Either root is browsable.
+    for path in (a, b):
+        assert (
+            client.post("/api/filesystem/browse", json={"path": str(path)}).status_code
+            == 200
+        )
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    assert (
+        client.post("/api/filesystem/browse", json={"path": str(outside)}).status_code
+        == 403
+    )
+
+
+def test_health_reports_access_roots(client, tmp_path, monkeypatch):
+    import os
+
+    from media_diff import config
+
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    monkeypatch.setattr(config, "ACCESS_ROOTS", [str(a), str(b)])
+    monkeypatch.setattr(config, "ACCESS_ROOT", None)
+
+    body = client.get("/api/health").json()
+    assert body["roots"] == [os.path.realpath(str(a)), os.path.realpath(str(b))]
+    assert body["root"] == os.path.realpath(str(a))
+
+
 def test_browse_lists_images(client, image_dir):
     res = client.post("/api/filesystem/browse", json={"path": str(image_dir)})
     assert res.status_code == 200

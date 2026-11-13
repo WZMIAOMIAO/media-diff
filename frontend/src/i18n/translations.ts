@@ -127,6 +127,7 @@ export const zh: Dict = {
   'browse.select': '选择此文件夹',
   'browse.failed': '浏览失败',
   'browse.rootsFailed': '获取根目录失败',
+  'browse.roots': '可访问的根目录',
 
   // watermark
   'watermark.title': '水印设置',
@@ -388,6 +389,7 @@ export const en: Dict = {
   'browse.select': 'Select this folder',
   'browse.failed': 'Browse failed',
   'browse.rootsFailed': 'Failed to load root directories',
+  'browse.roots': 'Accessible roots',
 
   // watermark
   'watermark.title': 'Watermark Settings',

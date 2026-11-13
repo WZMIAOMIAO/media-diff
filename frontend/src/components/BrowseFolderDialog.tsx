@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { browseFolder, getRoots, type FileEntry, type SubDir } from '../api';
+import {
+  browseFolder,
+  getAccessRoots,
+  getRoots,
+  type FileEntry,
+  type SubDir,
+} from '../api';
 import { useI18n } from '../i18n';
 
 interface BrowseFolderDialogProps {
@@ -37,6 +43,7 @@ function BrowseFolderDialog({
   const [inputPath, setInputPath] = useState('');
   const [subdirs, setSubdirs] = useState<SubDir[]>([]);
   const [jsonFiles, setJsonFiles] = useState<FileEntry[]>([]);
+  const [roots, setRoots] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -66,15 +73,30 @@ function BrowseFolderDialog({
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
+      // Configured access roots are listed at the bottom so the user can jump
+      // between them without typing a path.
+      let accessRoots: string[] = [];
+      try {
+        accessRoots = await getAccessRoots();
+        if (cancelled) return;
+        setRoots(accessRoots);
+      } catch {
+        // Ignore: the list is a convenience; browsing still works.
+      }
+
       const preferred = defaultPathRef.current;
       if (preferred) {
         await navigateTo(preferred);
         return;
       }
+      if (accessRoots.length > 0) {
+        await navigateTo(accessRoots[0]);
+        return;
+      }
       try {
-        const { roots } = await getRoots();
-        if (cancelled || roots.length === 0) return;
-        await navigateTo(roots[0]);
+        const { roots: osRoots } = await getRoots();
+        if (cancelled || osRoots.length === 0) return;
+        await navigateTo(osRoots[0]);
       } catch {
         if (!cancelled) setError(t('browse.rootsFailed'));
       }
@@ -204,6 +226,29 @@ function BrowseFolderDialog({
               </div>
             ))}
         </div>
+
+        {roots.length > 1 && (
+          <div className="shrink-0 border-t border-[#3c3c3c] px-1 py-1">
+            <div className="px-1 pb-1 text-xs text-[#888888]">
+              {t('browse.roots')}
+            </div>
+            <div className="max-h-28 overflow-auto">
+              {roots.map((root) => (
+                <div
+                  key={root}
+                  onClick={() => void navigateTo(root)}
+                  title={root}
+                  className={`flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer rounded hover:bg-[#3c3c3c] ${
+                    root === currentPath ? 'text-[#4a9eff]' : 'text-[#e0e0e0]'
+                  }`}
+                >
+                  <span>🏠</span>
+                  <span className="truncate">{root}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center justify-end gap-2 p-2 border-t border-[#3c3c3c]">
           <button

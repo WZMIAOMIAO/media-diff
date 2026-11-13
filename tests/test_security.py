@@ -8,7 +8,9 @@ from media_diff.utils.security import (
     AccessDeniedError,
     ensure_within_access_root,
     get_access_root,
+    get_access_roots,
     is_within_access_root,
+    validate_access_root,
 )
 
 
@@ -163,3 +165,57 @@ def test_caches_do_not_bypass_access_root(client, tmp_path, monkeypatch):
         client.get("/api/videos/frame", params={"path": str(vid), "frame": 1}).status_code
         == 403
     )
+
+
+def test_multiple_roots_allow_each(tmp_path, monkeypatch):
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    (a / "sub").mkdir()
+    (b / "sub").mkdir()
+    real_a = os.path.realpath(str(a))
+    real_b = os.path.realpath(str(b))
+    monkeypatch.setattr(config, "ACCESS_ROOTS", [str(a), str(b)])
+    monkeypatch.setattr(config, "ACCESS_ROOT", None)
+
+    assert get_access_roots() == [real_a, real_b]
+    assert get_access_root() == real_a  # back-compat: first root
+    for path in (a, a / "sub", b, b / "sub"):
+        assert is_within_access_root(str(path)) is True
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    assert is_within_access_root(str(outside)) is False
+    assert is_within_access_root("/etc/passwd") is False
+    with pytest.raises(AccessDeniedError):
+        ensure_within_access_root(str(outside))
+
+
+def test_multiple_roots_normalized_and_deduped(tmp_path, monkeypatch):
+    a = tmp_path / "a"
+    a.mkdir()
+    monkeypatch.setattr(
+        config, "ACCESS_ROOTS", [str(a), str(a), str(a / "."), ""]
+    )
+    monkeypatch.setattr(config, "ACCESS_ROOT", None)
+    assert get_access_roots() == [os.path.realpath(str(a))]
+
+
+def test_validate_access_root_checks_all_roots(tmp_path, monkeypatch):
+    ok = tmp_path / "ok"
+    ok.mkdir()
+    missing = tmp_path / "missing"
+    monkeypatch.setattr(config, "ACCESS_ROOTS", [str(ok), str(missing)])
+    monkeypatch.setattr(config, "ACCESS_ROOT", None)
+    with pytest.raises(RuntimeError, match="missing"):
+        validate_access_root()
+
+
+def test_legacy_access_root_still_works(tmp_path, monkeypatch):
+    """Older callers/tests only set ACCESS_ROOT; it must still be honored."""
+    root = tmp_path / "legacy"
+    root.mkdir()
+    monkeypatch.setattr(config, "ACCESS_ROOTS", [])
+    monkeypatch.setattr(config, "ACCESS_ROOT", str(root))
+    assert get_access_roots() == [os.path.realpath(str(root))]
+    assert is_within_access_root(str(root / "x")) is True

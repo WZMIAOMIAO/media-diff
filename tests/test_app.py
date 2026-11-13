@@ -10,6 +10,8 @@ def test_health(client):
     assert body["status"] == "ok"
     assert body["service"] == "media-diff"
     assert isinstance(body["pid"], int) and body["pid"] > 0
+    assert body["roots"] == []
+    assert body["root"] is None
     assert set(body["concurrency"]) == {
         "extract",
         "transcode",
