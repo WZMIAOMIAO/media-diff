@@ -1,7 +1,13 @@
 import type { HistogramData, TranscodeStatus, VideoBrowseResult, VideoEntry, VideoInfo } from '../types/video';
 import { t } from '../i18n/store';
+import { isWithinAnyRoot } from '../utils/path';
+import { LruCache } from '../utils/lruCache';
 
 const API_BASE = '/api';
+
+/** Upper bounds for the module-level caches so a long session cannot grow forever. */
+export const VIDEO_THUMB_CACHE_MAX = 500;
+export const VIDEO_FRAME_HISTOGRAM_CACHE_MAX = 400;
 
 // ---- folder / listing ----
 
@@ -129,7 +135,9 @@ interface FrameEntry {
 
 const _frameCache = new Map<string, FrameEntry>();
 const _frameInflight = new Map<string, { promise: Promise<FrameEntry>; controller: AbortController }>();
-export const frameHistogramCache = new Map<string, HistogramData>();
+export const frameHistogramCache = new LruCache<string, HistogramData>(
+  VIDEO_FRAME_HISTOGRAM_CACHE_MAX,
+);
 
 // Upper bound for cached frames. The "live" working set per window is only
 // currentFrame +/- PREFETCH_RANGE, so this is generous. On overflow we evict
@@ -192,7 +200,10 @@ export async function fetchVideoFrame(
         const histogram = parseHistogramHeader(res.headers.get('X-Histogram'));
         const entry: FrameEntry = { blobUrl, histogram };
         putFrameCache(key, entry);
-        if (histogram) frameHistogramCache.set(key, histogram);
+        if (histogram) {
+          frameHistogramCache.set(key, histogram);
+          frameHistogramCache.trim();
+        }
         return entry;
       } finally {
         if (_frameInflight.get(key)?.controller === controller) _frameInflight.delete(key);
@@ -231,12 +242,13 @@ export async function fetchVideoFrameHistogram(
   const parsed = (await res.json()) as RawHistogram;
   const data = normalizeHistogram(parsed);
   frameHistogramCache.set(key, data);
+  frameHistogramCache.trim();
   return data;
 }
 
 // ---- thumbnail cache (video cover frames) ----
 
-const _thumbCache = new Map<string, FrameEntry>();
+const _thumbCache = new LruCache<string, FrameEntry>(VIDEO_THUMB_CACHE_MAX);
 const _thumbInflight = new Map<string, Promise<FrameEntry>>();
 
 export async function fetchVideoThumbnail(
@@ -258,7 +270,12 @@ export async function fetchVideoThumbnail(
       const blobUrl = URL.createObjectURL(blob);
       const histogram = parseHistogramHeader(res.headers.get('X-Histogram'));
       const entry: FrameEntry = { blobUrl, histogram };
+      const previous = _thumbCache.peek(key);
+      if (previous) URL.revokeObjectURL(previous.blobUrl);
       _thumbCache.set(key, entry);
+      for (const [, dropped] of _thumbCache.trim()) {
+        URL.revokeObjectURL(dropped.blobUrl);
+      }
       return entry;
     } finally {
       _thumbInflight.delete(key);
@@ -266,6 +283,22 @@ export async function fetchVideoThumbnail(
   })();
   _thumbInflight.set(key, promise);
   return promise;
+}
+
+/**
+ * Drop video cover thumbnails that no longer belong to any of ``folders``
+ * (empty list = clear all), revoking their object URLs.
+ */
+export function evictVideoThumbnailCacheForFolders(folders: string[]): void {
+  const at = (key: string) => {
+    const idx = key.lastIndexOf('@');
+    return idx === -1 ? key : key.slice(0, idx);
+  };
+  for (const [key, entry] of [..._thumbCache]) {
+    if (isWithinAnyRoot(at(key), folders)) continue;
+    URL.revokeObjectURL(entry.blobUrl);
+    _thumbCache.delete(key);
+  }
 }
 
 // evict frame cache entries outside the keep set (by videoPath+frame key)

@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { voteBlindEval } from '../../api';
-import { getVideoInfo, listVideos } from '../../api/video';
+import {
+  evictVideoThumbnailCacheForFolders,
+  getVideoInfo,
+  listVideos,
+} from '../../api/video';
 import type { TranscodeState, VideoEntry, VideoInfo } from '../../types/video';
 import type {
   AnnotationApi,
@@ -418,6 +422,9 @@ export function useVideoCompare(): UseVideoCompareReturn {
       if (foldersRef.current.length < 2) {
         setIntersectionModeState(false);
       }
+      evictVideoThumbnailCacheForFolders(
+        foldersRef.current.map((f) => f.path),
+      );
       forceUpdate();
     },
     [forceUpdate],
@@ -460,6 +467,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
     setTruncated(false);
     recursiveRef.current = false;
     setRecursiveModeState(false);
+    evictVideoThumbnailCacheForFolders([]);
     forceUpdate();
   }, [forceUpdate]);
 

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { listImages, voteBlindEval, type FileEntry } from '../api';
+import {
+  evictImageCacheForFolders,
+  evictThumbnailCacheForFolders,
+  listImages,
+  voteBlindEval,
+  type FileEntry,
+} from '../api';
 import type {
   AnnotationApi,
   AnnotationEntry,
@@ -366,6 +372,9 @@ export function useImageCompare(): UseImageCompareReturn {
       if (foldersRef.current.length < 2) {
         setIntersectionModeState(false);
       }
+      const remaining = foldersRef.current.map((f) => f.path);
+      evictImageCacheForFolders(remaining);
+      evictThumbnailCacheForFolders(remaining);
       forceUpdate();
     },
     [forceUpdate],
@@ -407,6 +416,8 @@ export function useImageCompare(): UseImageCompareReturn {
     setTruncated(false);
     recursiveRef.current = false;
     setRecursiveModeState(false);
+    evictImageCacheForFolders([]);
+    evictThumbnailCacheForFolders([]);
     forceUpdate();
   }, [forceUpdate]);
 

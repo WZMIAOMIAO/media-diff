@@ -7,8 +7,14 @@ import type {
   HistogramData,
 } from '../types';
 import { t } from '../i18n/store';
+import { isWithinAnyRoot } from '../utils/path';
+import { LruCache } from '../utils/lruCache';
 
 const API_BASE = '/api';
+
+/** Upper bounds for the module-level caches so a long session cannot grow forever. */
+export const IMAGE_THUMB_CACHE_MAX = 1000;
+export const IMAGE_HISTOGRAM_CACHE_MAX = 2000;
 
 export interface SubDir {
   name: string;
@@ -123,18 +129,30 @@ export async function fetchImageBlob(path: string): Promise<string> {
   return promise;
 }
 
-// 缩略图（返回 blobUrl + 直方图数据，全局缓存 + 请求去重）
-const _thumbCache = new Map<
+// 缩略图（返回 blobUrl + 直方图数据，全局 LRU 缓存 + 请求去重）
+const _thumbCache = new LruCache<
   string,
   { blobUrl: string; histogram: HistogramData | null }
->();
+>(IMAGE_THUMB_CACHE_MAX);
 const _thumbInflight = new Map<
   string,
   Promise<{ blobUrl: string; histogram: HistogramData | null }>
 >();
 
 // 直方图 fallback 缓存（缩略图加载时自动填充）
-export const histogramCache = new Map<string, HistogramData>();
+export const histogramCache = new LruCache<string, HistogramData>(
+  IMAGE_HISTOGRAM_CACHE_MAX,
+);
+
+function trimHistogramCache(): void {
+  // No external resources are attached to histogram entries; dropping is enough.
+  histogramCache.trim();
+}
+
+function putHistogram(path: string, data: HistogramData): void {
+  histogramCache.set(path, data);
+  trimHistogramCache();
+}
 
 interface RawHistogram {
   r: number[];
@@ -186,8 +204,15 @@ export async function fetchThumbnailBlob(
       const blobUrl = URL.createObjectURL(blob);
       const histogram = parseHistogramHeader(res.headers.get('X-Histogram'));
       const result = { blobUrl, histogram };
+      const previous = _thumbCache.peek(key);
+      if (previous) URL.revokeObjectURL(previous.blobUrl);
       _thumbCache.set(key, result);
-      if (histogram) histogramCache.set(path, histogram);
+      for (const [droppedKey, dropped] of _thumbCache.trim()) {
+        URL.revokeObjectURL(dropped.blobUrl);
+        const droppedPath = thumbKeyPath(droppedKey);
+        if (!hasThumbForPath(droppedPath)) histogramCache.delete(droppedPath);
+      }
+      if (histogram) putHistogram(path, histogram);
       return result;
     } finally {
       _thumbInflight.delete(key);
@@ -207,8 +232,22 @@ export async function fetchHistogram(path: string): Promise<HistogramData> {
   if (!res.ok) throw new Error(`${t('api.histogramFailed')}: ${path}`);
   const parsed = (await res.json()) as RawHistogram;
   const data = normalizeHistogram(parsed);
-  histogramCache.set(path, data);
+  putHistogram(path, data);
   return data;
+}
+
+/** The path part of a thumbnail cache key (``${path}@${size}``). */
+function thumbKeyPath(key: string): string {
+  const at = key.lastIndexOf('@');
+  return at === -1 ? key : key.slice(0, at);
+}
+
+function hasThumbForPath(path: string): boolean {
+  const prefix = `${path}@`;
+  for (const key of _thumbCache.keys()) {
+    if (key.startsWith(prefix)) return true;
+  }
+  return false;
 }
 
 // 缓存淘汰：保留 pathsToKeep 中的条目，其余 revokeObjectURL 并删除
@@ -218,6 +257,46 @@ export function evictImageCache(pathsToKeep: Set<string>): void {
       URL.revokeObjectURL(url);
       _imageCache.delete(path);
     }
+  }
+}
+
+/**
+ * Drop full-size image blobs that no longer belong to any of ``folders``.
+ * An empty list clears everything (the user cleared the compare pane). Keeping
+ * paths under the remaining folders avoids revoking images still on screen.
+ */
+export function evictImageCacheForFolders(folders: string[]): void {
+  for (const [path, url] of [..._imageCache]) {
+    if (isWithinAnyRoot(path, folders)) continue;
+    URL.revokeObjectURL(url);
+    _imageCache.delete(path);
+  }
+}
+
+/**
+ * Drop thumbnail blobs + histograms that no longer belong to any of
+ * ``folders`` (empty list = clear all). The backend keeps its own bounded LRU,
+ * so a later re-selection is a cheap HTTP hit rather than a re-decode.
+ */
+export function evictThumbnailCacheForFolders(folders: string[]): void {
+  if (folders.length === 0) {
+    for (const entry of _thumbCache.values()) {
+      URL.revokeObjectURL(entry.blobUrl);
+    }
+    _thumbCache.clear();
+    histogramCache.clear();
+    return;
+  }
+  const droppedPaths = new Set<string>();
+  for (const [key, entry] of [..._thumbCache]) {
+    const path = thumbKeyPath(key);
+    if (isWithinAnyRoot(path, folders)) continue;
+    URL.revokeObjectURL(entry.blobUrl);
+    _thumbCache.delete(key);
+    droppedPaths.add(path);
+  }
+  for (const path of droppedPaths) {
+    if (!hasThumbForPath(path)) histogramCache.delete(path);
   }
 }
 
