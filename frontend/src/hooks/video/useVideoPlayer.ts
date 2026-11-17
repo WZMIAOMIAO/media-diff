@@ -414,29 +414,41 @@ export function useVideoPlayer(deps: PlayerDeps): VideoPlayerApi {
     }
   }, []);
 
-  // when current video changes (switch), reset to frame 1. Normally pause;
-  // when the switch was triggered by auto-next, start playing instead.
+  // When the current video changes (switch), reset to frame 1. Preserve the
+  // playback intent: if the user was watching (or this was triggered by
+  // auto-next), keep playing the new video without showing an extracted paused
+  // frame; if they had paused, stay paused for frame-by-frame comparison.
+  // Adding/removing a folder is not a video switch, so it keeps the old pause
+  // behavior.
   const videosKey = selectedFolders
     .map((f) => `${f.path}:${currentVideos.get(f.path)?.path ?? ''}`)
     .join('|');
+  const folderPathsKey = selectedFolders.map((f) => f.path).join('|');
+  const prevFolderPathsKeyRef = useRef(folderPathsKey);
   useEffect(() => {
     const fromAutoNext = autoNextJustFiredRef.current;
     autoNextJustFiredRef.current = false;
+    const folderSetChanged =
+      prevFolderPathsKeyRef.current !== folderPathsKey;
+    prevFolderPathsKeyRef.current = folderPathsKey;
+    const wasPlaying = isPlayingRef.current;
+    const resumePlayback = fromAutoNext || (wasPlaying && !folderSetChanged);
+
     setIsPlaying(false);
     isPlayingRef.current = false;
     setCurrentFrame(1);
     seekAllVideos(1);
     for (const el of videoRefs.current.values()) el.pause();
-    if (!fromAutoNext) {
-      // Manual switch → drop any queued "resume when ready".
+    if (!resumePlayback) {
+      // Paused switch / folder change → drop any queued "resume when ready".
       autoPlayPendingRef.current = false;
     } else if (canPlayRef.current) {
-      // Auto-next landed on a ready video → keep playing (as before).
+      // New video is ready → keep playing, with no paused-frame extraction.
       autoPlayPendingRef.current = false;
       play();
     } else {
-      // Auto-next landed on a video that is still transcoding → wait and
-      // resume automatically once everything is ready (canPlay effect).
+      // New video is still transcoding → wait and resume automatically once
+      // everything is ready (canPlay effect).
       autoPlayPendingRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
