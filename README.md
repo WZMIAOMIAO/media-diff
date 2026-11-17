@@ -1,270 +1,273 @@
 # Media Diff <img src="assets/screenshots/logo.jpeg" alt="logo" height="26" />
 
-> 本项目代码全部由 GLM5.2 和 DeepseekV4.1Flash 开发。
+English | [简体中文](README.zh-CN.md)
 
-本地或远程部署、基于浏览器运行的图片与视频对比 / 标注 / 盲评工具。支持单图 / 双图 / 三图 / 四图查看、同步缩放平移、直方图叠加，以及视频逐帧对比（播放同步 + 暂停抽帧做图像级精细比较）。
+> All code in this project was developed by GLM5.2 and DeepseekV4.1Flash.
 
-前端构建产物已随 Python 包分发，安装后一条命令即可启动，**无需安装 Node.js**；也可 `--host 0.0.0.0` 部署到服务器供远程访问（见 [远程部署](#远程部署)）。
+A browser-based image and video comparison / annotation / blind-review tool that can be deployed locally or remotely. It supports single, dual, triple, and quad image views, synchronized zoom and pan, histogram overlays, and frame-by-frame video comparison (synchronized playback plus paused-frame extraction for pixel-level inspection).
 
-## 界面预览
+The frontend build is shipped inside the Python package, so a single command is enough after installation — **Node.js is not required**. You can also deploy it to a server with `--host 0.0.0.0` for remote access (see [Remote deployment](#remote-deployment)).
 
-图像对比模式（多窗口同步缩放、RGB 直方图叠加、窗口水印、标注、盲评等）：
+## Screenshots
 
-![图像对比模式](assets/screenshots/image-compare.jpg)
+Image comparison mode (multi-window synchronized zoom, RGB histograms, window watermarks, annotation, blind review, etc.):
 
-视频对比模式（多窗口逐帧对比、倍数播放、自动播放下一个视频、RGB 直方图叠加、窗口水印、标注、盲评等）：
-![视频对比模式](assets/screenshots/video-compare.png)
+![Image comparison mode](assets/screenshots/image-compare.jpg)
 
-## 安装
+Video comparison mode (multi-window frame-by-frame comparison, speed control, auto-advance, RGB histograms, window watermarks, annotation, blind review, etc.):
 
-> 目前尚未发布到 PyPI，请从 git 仓库或本地源码安装。
+![Video comparison mode](assets/screenshots/video-compare.png)
 
-使用 [uv](https://docs.astral.sh/uv/)（推荐）：
+## Installation
+
+> This project is not yet published on PyPI. Please install it from the git repository or local source.
+
+Using [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
-# 从 git 仓库安装
+# Install from the git repository
 uv tool install "git+https://github.com/WZMIAOMIAO/media-diff.git"
 
-# 或克隆后从本地源码安装
+# Or install from local source after cloning
 git clone https://github.com/WZMIAOMIAO/media-diff.git
 cd media-diff
 uv tool install .
 ```
 
-或使用 pip：
+Or using pip:
 
 ```bash
 pip install "git+https://github.com/WZMIAOMIAO/media-diff.git"
-# 或从本地源码
+# Or from local source
 pip install .
 ```
 
-安装后若提示 `~/.local/bin` 不在 PATH，执行一次：
+If `~/.local/bin` is not on your PATH after installation, run:
 
 ```bash
-uv tool update-shell    # 之后重开终端
+uv tool update-shell    # reopen the terminal afterwards
 ```
 
-> 发布到 PyPI 后即可直接使用 `uv tool install media-diff` / `pip install media-diff`。
+> Once published to PyPI, you can use `uv tool install media-diff` / `pip install media-diff` directly.
 
-## 使用
+## Usage
 
 ```bash
 media-diff
 ```
 
-默认在 `http://127.0.0.1:8000` 启动服务并自动打开浏览器。常用参数：
+Starts the server at `http://127.0.0.1:8000` and opens the browser automatically. Common options:
 
-| 参数 | 说明 |
-|------|------|
-| `--host 0.0.0.0` | 监听所有网卡，供局域网访问 |
-| `--port 8080` | 指定端口（默认 8000） |
-| `--no-browser` | 启动后不自动打开浏览器 |
-| `--root PATH` | 限制只能访问 `PATH` 及其子目录，打开目录时默认指向该路径 |
-| `--reload` | 代码变更自动重载（开发用） |
-| `--extract-concurrency N` | ffmpeg 抽帧并发上限（默认 4） |
-| `--transcode-concurrency N` | 视频转码并发上限（默认 1） |
-| `--thumbnail-concurrency N` | 视频封面抽帧并发上限（默认 2） |
-| `--probe-concurrency N` | 视频元信息探测并发上限（默认 2） |
-| `--sync-threads N` | 同步端点（图片缩略图/直方图、文件系统列举等）线程池上限（默认 40） |
-| `--version` | 查看版本 |
+| Option | Description |
+|--------|-------------|
+| `--host 0.0.0.0` | Listen on all interfaces for LAN access |
+| `--port 8080` | Use a custom port (default: 8000) |
+| `--no-browser` | Do not open the browser on startup |
+| `--root PATH` | Restrict access to `PATH` and its subdirectories; the folder picker starts here |
+| `--reload` | Auto-reload on code changes (development only) |
+| `--extract-concurrency N` | Max concurrent ffmpeg frame extractions (default: 4) |
+| `--transcode-concurrency N` | Max concurrent video transcodes (default: 1) |
+| `--thumbnail-concurrency N` | Max concurrent video thumbnail extractions (default: 2) |
+| `--probe-concurrency N` | Max concurrent video metadata probes (default: 2) |
+| `--sync-threads N` | Thread pool size for synchronous endpoints (image thumbnails/histograms, filesystem listing, etc.; default: 40) |
+| `--version` | Print the version |
 
-> **并发参数按用途分开**，也可用环境变量设置：`MEDIA_DIFF_EXTRACT_CONCURRENCY`、`MEDIA_DIFF_TRANSCODE_CONCURRENCY`、`MEDIA_DIFF_THUMBNAIL_CONCURRENCY`、`MEDIA_DIFF_PROBE_CONCURRENCY`、`MEDIA_DIFF_SYNC_THREADS`（CLI 参数优先级更高）。多用户或高核数服务器可适当调大（如 32 核可设抽帧 16、转码 4；192 核可设更高）。所有希望使用同一批视频的用户会共享缓存与转码结果。
+> **Concurrency options are split by workload** and can also be set with environment variables: `MEDIA_DIFF_EXTRACT_CONCURRENCY`, `MEDIA_DIFF_TRANSCODE_CONCURRENCY`, `MEDIA_DIFF_THUMBNAIL_CONCURRENCY`, `MEDIA_DIFF_PROBE_CONCURRENCY`, and `MEDIA_DIFF_SYNC_THREADS` (CLI options take precedence). Increase them on multi-user or high-core servers (for example, extract 16 / transcode 4 on a 32-core machine, or higher on a 192-core machine). Users who open the same videos share the cache and transcode results.
 
-> **多用户并发**：图片缩略图/直方图、文件系统列举等同步请求共用一个线程池（`--sync-threads`，默认 40）；视频抽帧/转码/探测则各有独立的 ffmpeg 进程池（见上）。健康检查 `/api/health` 为异步端点，不占用该线程池，因此即便并发很高，`media-diff status` / `stop` 也能正确判断实例状态。并发用户很多时可按需调大 `--sync-threads` 与各 ffmpeg 并发。
+> **Multi-user concurrency**: synchronous requests such as image thumbnails/histograms and filesystem listings share one thread pool (`--sync-threads`, default 40). Video frame extraction, transcoding, and probing each have their own ffmpeg process pool (see above). The health endpoint `/api/health` is async and does not use that thread pool, so `media-diff status` / `stop` can still detect an instance correctly under heavy load. Increase `--sync-threads` and the ffmpeg concurrency limits as needed for many users.
 
-### 限制访问目录（沙箱）
+### Restricting directories (sandbox)
 
-默认不限制访问范围，可读取本机任意路径。若部署在共享环境或只想暴露某些数据集，用 `--root` 指定访问根目录（**可重复**，也可在一个参数里用 `os.pathsep` 分隔，Linux/macOS 为 `:`，Windows 为 `;`）：
+By default any local path can be read. For shared environments or to expose only specific datasets, use `--root` to specify allowed roots (**repeatable**, or separate multiple paths with `os.pathsep`: `:` on Linux/macOS, `;` on Windows):
 
 ```bash
-# 多个根目录：重复传参
+# Multiple roots: repeat the option
 media-diff --root /data/dataset --root /data/another
 
-# 或在一次参数内用 pathsep 分隔（Linux/macOS）
+# Or separate paths with pathsep in one argument (Linux/macOS)
 media-diff --root /data/dataset:/data/another
 ```
 
-- 打开目录（选择文件夹）时**默认指向第一个根目录**；其余根目录可直接在输入框输入绝对路径添加；
-- 只允许浏览/读取这些目录**及其子目录**，访问所有根目录以外的路径一律返回 403（符号链接指向外部同样被拦截）；
-- 也可用环境变量 `MEDIA_DIFF_ROOT`（同样支持 pathsep 分隔多个）；`--root` 传入的路径有任一不存在会直接报错退出。
+- The folder picker **starts at the first root**; other roots can be entered as absolute paths.
+- Only these directories **and their subdirectories** can be browsed/read. Access to anything outside all roots returns 403 (symlinks pointing outside are blocked too).
+- The environment variable `MEDIA_DIFF_ROOT` is also supported (multiple paths separated by pathsep). If any `--root` path does not exist, startup fails immediately.
 
 ```bash
-# 等价写法
+# Equivalent forms
 MEDIA_DIFF_ROOT=/data/dataset media-diff
-MEDIA_DIFF_ROOT=/data/dataset:/data/another media-diff   # 多个根
+MEDIA_DIFF_ROOT=/data/dataset:/data/another media-diff   # multiple roots
 ```
 
-也可用模块方式启动：`python -m media_diff`。
+You can also start it as a module: `python -m media_diff`.
 
-在前台运行时按 `Ctrl+C` 停止；服务会最多等待 5 秒让浏览器中未完成的连接（如视频流）关闭，随后强制退出，不会卡在 "Shutting down"。
+Press `Ctrl+C` to stop it in the foreground. The server waits up to 5 seconds for unfinished browser connections (such as video streams) to close, then force-exits without hanging on "Shutting down".
 
-### 查看与停止运行中的服务
+### Check and stop a running instance
 
 ```bash
-media-diff status            # 列出正在运行的实例（PID / 状态 / 版本 / 启动时间 / 地址）
-media-diff status --json     # 以 JSON 输出，便于脚本处理
+media-diff status            # List running instances (PID / status / version / start time / address)
+media-diff status --json     # JSON output for scripts
 
-media-diff stop              # 停止实例（仅一个时）；多个时需指定范围
-media-diff stop --port 8000  # 停止监听指定端口的实例
-media-diff stop --pid 12345  # 停止指定 PID 的实例
-media-diff stop --all        # 停止所有运行中的实例
-media-diff stop --force      # 跳过身份校验，强制结束进程
+media-diff stop              # Stop the instance (only when there is one); specify a target when multiple exist
+media-diff stop --port 8000  # Stop the instance listening on a port
+media-diff stop --pid 12345  # Stop a specific PID
+media-diff stop --all        # Stop all running instances
+media-diff stop --force      # Skip identity checks and force-kill the process
 ```
 
-`stop` 默认会先做健康检查确认目标确实是 media-diff 服务（防止 PID 被复用误杀），校验不通过会跳过并提示，可用 `--force` 强制结束。
+`stop` performs a health check first to confirm the target really is a media-diff server (avoiding PID-reuse mistakes). If verification fails it skips the target and reports it; `--force` overrides this.
 
-### 清理缓存
+### Clean cache
 
-非原生格式（mkv/avi/mov/flv 等）播放时会转码为 mp4 缓存到系统临时目录，长期使用可能占用磁盘。可用以下命令清理：
+Videos in non-native formats (mkv/avi/mov/flv, etc.) are transcoded to mp4 and cached in the system temporary directory, which may take up disk space over time. Clean it with:
 
 ```bash
-media-diff clean             # 删除全部转码缓存，并显示释放的空间
-media-diff clean --dry-run   # 只统计不删除
+media-diff clean             # Delete all transcode cache and report reclaimed space
+media-diff clean --dry-run   # Only calculate, do not delete
 ```
 
-缓存目录默认在系统临时目录下（Windows 为 `%TEMP%\_video_transcode_cache`），可用环境变量 `MEDIA_DIFF_TRANSCODE_CACHE_DIR` 指定其他位置。
+The cache directory defaults to the system temp directory (Windows: `%TEMP%\_video_transcode_cache`) and can be changed with `MEDIA_DIFF_TRANSCODE_CACHE_DIR`.
 
-启动时会自动检测：若目标 `host:port` 上已有 media-diff 在运行，会直接打开该地址而不是重复启动；若检测到其他端口的实例，会提示但仍在当前端口启动。
+Startup checks automatically: if media-diff is already running at the target `host:port`, it opens that address instead of starting a duplicate; if instances are detected on other ports it prints a notice but still starts on the current port.
 
-> 实例信息记录在用户状态目录（Linux 为 `~/.local/state/media-diff/`，macOS 为 `~/Library/Application Support/media-diff/`，Windows 为 `%LOCALAPPDATA%\media-diff\`），可用环境变量 `MEDIA_DIFF_STATE_DIR` 覆盖。进程退出后会自动清理；失效条目会在下次读取时按 PID、**进程身份标识（启动时间，可识别 PID 复用）** 与健康检查剔除。
+> Instance information is stored in the user state directory (Linux: `~/.local/state/media-diff/`, macOS: `~/Library/Application Support/media-diff/`, Windows: `%LOCALAPPDATA%\media-diff\`) and can be overridden with `MEDIA_DIFF_STATE_DIR`. It is cleaned up on exit; stale entries are filtered on the next read by PID, **process identity (start time, which detects PID reuse)**, and health check.
 
-> 视频功能依赖 ffmpeg。它通过 `imageio-ffmpeg` 依赖自动提供，无需系统单独安装；若系统存在 `ffprobe`，探测会使用它，否则自动回退到 `ffmpeg -i` 解析。
+> Video features depend on ffmpeg. It is provided automatically through the `imageio-ffmpeg` dependency, so no separate system installation is required. If `ffprobe` is available, probing uses it; otherwise it falls back to parsing `ffmpeg -i` output.
 
-### 下载文件夹（打包为 zip）
+### Download folders (packed as zip)
 
-在目录树里右键文件/文件夹即可「下载」：单个文件直接下载原始字节（非转码版视频）；**文件夹由后端打包成 zip**（保留原目录结构、含隐藏项与空目录），打包进度在页面弹窗显示，下载/暂停续传用浏览器原生下载界面。上限：文件夹条目总数（含子目录）超过 2000 会被拒绝。同目录的并发下载共享同一次打包。
+Right-click a file or folder in the tree and choose "Download": single files download their original bytes directly (no transcoded video); **folders are packed into a zip by the backend** (preserving the directory structure, including hidden entries and empty directories). Packing progress is shown in a dialog, and download/pause/resume use the browser's native download UI. Limit: folders whose total entry count (including subdirectories) exceeds 2000 are rejected. Concurrent downloads of the same folder share one packing job.
 
-打包默认**不压缩（store）**——图片/视频本身已是压缩格式，deflate 只会慢约 10 倍而体积几乎不变。如需对纯文本目录压缩更小体积，可设环境变量 `MEDIA_DIFF_ZIP_COMPRESSION=deflate`。打包临时文件位于系统临时目录，下载完成后（或从未下载、超过 TTL）会自动清理，无需手动处理。
+Packing uses **no compression (store)** by default — images and videos are already compressed, and deflate would be about 10x slower with almost no size benefit. For text-only folders, set `MEDIA_DIFF_ZIP_COMPRESSION=deflate`. Temporary zip files live in the system temp directory and are cleaned up after download (or when never downloaded and past their TTL); no manual cleanup is needed.
 
-### 播放与暂停（抽帧）颜色不一致？
+### Playback vs paused (extracted frame) color mismatch?
 
-视频**播放时**与**暂停后（抽帧）**颜色可能略有差异（例如纯红视频播放偏橙、暂停却是纯红），这**不是文件或本工具的问题**：
+The colors of a video **during playback** and **after pausing (extracted frame)** may differ slightly (for example, a pure red video looks orange during playback but pure red when paused). This is **not a problem with the file or this tool**:
 
-- **暂停画面**由后端用 `ffmpeg` 抽取，**颜色准确**，与系统播放器（如 Windows 自带媒体播放器）/ `ffmpeg` 一致。
-- **播放画面**由浏览器原生 `<video>` 渲染，颜色取决于浏览器的解码器（软件/硬件 GPU）、色彩管理与硬件叠加层（overlay），本工具无法控制；个别环境（常见于 Windows 上开启硬件加速的 Chrome/Edge、以及带色彩标签的 SD/BT.601 内容）会对视频做与静态图片不同的色彩处理，出现"播放偏色、暂停正确"。
-- 本工具**不修改视频字节、不加任何滤镜**（`/api/videos/stream` 对可播放格式原样返回）。
+- The **paused image** is extracted by the backend with `ffmpeg` and is **color-accurate**, matching system players (such as Windows Media Player) and `ffmpeg`.
+- The **playback image** is rendered by the browser's native `<video>`, so its color depends on the browser's decoder (software/hardware GPU), color management, and hardware overlay. This tool cannot control that. In some environments (commonly Chrome/Edge on Windows with hardware acceleration enabled, and SD/BT.601 content with color tags), the browser processes video differently from static images, producing "wrong color during playback, correct when paused".
+- This tool **does not modify video bytes or apply any filters** (`/api/videos/stream` returns playable formats unchanged).
 
-如遇此现象，可在浏览器中**关闭硬件加速**（Chrome/Edge：设置 → 系统 → 关闭"使用图形加速功能可用时"，重启浏览器）或换浏览器 / 机器再对比。
+If you see this, **disable hardware acceleration** in the browser (Chrome/Edge: Settings → System → turn off "Use graphics acceleration when available", then restart the browser), or try another browser/machine.
 
-## 远程部署
+## Remote deployment
 
-部署到远程服务器，供局域网 / 内网多用户通过浏览器访问（前端已随包分发，**无需安装 Node.js**）：
+Deploy to a remote server so multiple users on a LAN/intranet can access it through a browser (the frontend is bundled, **Node.js is not required**):
 
 ```bash
-# 监听所有网卡；建议配合 --root 只暴露数据集目录
+# Listen on all interfaces; using --root to expose only the dataset is recommended
 media-diff --host 0.0.0.0 --port 8000 --no-browser --root /data/dataset
 ```
 
-之后访问 `http://<服务器IP>:8000`。
+Then visit `http://<server-ip>:8000`.
 
-**多用户**：按机器核数调大并发，例如 `--sync-threads 64 --extract-concurrency 16 --transcode-concurrency 4`。
+**Multi-user**: increase concurrency according to CPU cores, for example `--sync-threads 64 --extract-concurrency 16 --transcode-concurrency 4`.
 
-## 技术栈
+## Tech stack
 
-| 层 | 技术 |
-|----|------|
-| 前端 | Vite + React 19 + TypeScript + Tailwind CSS v4 + React Router |
-| 后端 | Python FastAPI + Pillow + NumPy + imageio-ffmpeg |
+| Layer | Technology |
+|-------|------------|
+| Frontend | Vite + React 19 + TypeScript + Tailwind CSS v4 + React Router |
+| Backend | Python FastAPI + Pillow + NumPy + imageio-ffmpeg |
 
-## 项目结构
+## Project structure
 
 ```
 media-diff/
-├── media_diff/          # Python 包（可安装）
-│   ├── cli.py           # media-diff 命令入口（含 status / stop 子命令）
-│   ├── registry.py      # 运行实例注册表（status / stop / 启动去重）
-│   ├── app.py           # FastAPI 应用 + 前端静态托管 / SPA fallback
-│   ├── config.py        # 配置常量
-│   ├── routers/         # API 路由（filesystem / images / videos / annotations / blind_eval）
-│   ├── utils/           # 工具函数（缓存、图像、视频、文件系统、标注、盲评）
-│   └── static/          # 前端构建产物（提交进仓库，随 wheel 分发）
-├── frontend/            # 前端源码（仅开发时使用）
+├── media_diff/          # Python package (installable)
+│   ├── cli.py           # media-diff command entry (status / stop subcommands)
+│   ├── registry.py      # Running-instance registry (status / stop / startup dedupe)
+│   ├── app.py           # FastAPI app + frontend static hosting / SPA fallback
+│   ├── config.py        # Configuration constants
+│   ├── routers/         # API routes (filesystem / images / videos / annotations / blind_eval)
+│   ├── utils/           # Utilities (cache, images, videos, filesystem, annotations, blind review)
+│   └── static/          # Frontend build output (committed and shipped in the wheel)
+├── frontend/            # Frontend source (development only)
 │   ├── src/
-│   └── vite.config.ts   # 构建输出到 ../media_diff/static
-├── tests/               # pytest 测试
-├── doc/                 # 设计文档
+│   └── vite.config.ts   # Build output goes to ../media_diff/static
+├── tests/               # pytest tests
+├── doc/                 # Design documents
 ├── pyproject.toml
 └── LICENSE
 ```
 
-## 开发
+## Development
 
-### 环境要求
+### Requirements
 
-- **Python** >= 3.10（推荐 3.13+）
-- **Node.js** >= 18（仅前端开发 / 构建时需要）
-- **uv**（推荐）
+- **Python** >= 3.10 (3.13+ recommended)
+- **Node.js** >= 18 (only for frontend development / builds)
+- **uv** (recommended)
 
-### 安装依赖
+### Install dependencies
 
 ```bash
 uv sync --extra test
 cd frontend && npm install
 ```
 
-### 开发模式（前后端分离，支持热更新）
+### Development mode (separate frontend/backend with hot reload)
 
 ```bash
-# 终端 1：后端（http://localhost:8000）
+# Terminal 1: backend (http://localhost:8000)
 uv run python -m media_diff --reload
 
-# 终端 2：前端（http://localhost:5173，自动代理 /api 到后端）
+# Terminal 2: frontend (http://localhost:5173, proxies /api to the backend)
 cd frontend && npm run dev
 ```
 
-浏览器访问 `http://localhost:5173`。
+Open `http://localhost:5173` in the browser.
 
-### 构建前端并集成验证
+### Build the frontend and verify the integrated app
 
-前端构建产物会直接写入 Python 包内，随后由 FastAPI 单进程托管：
+The frontend build is written directly into the Python package and served by FastAPI in a single process:
 
 ```bash
-cd frontend && npm run build      # 输出到 media_diff/static
-cd .. && uv run media-diff        # 单端口访问 http://127.0.0.1:8000
+cd frontend && npm run build      # Output goes to media_diff/static
+cd .. && uv run media-diff        # Single-port access at http://127.0.0.1:8000
 ```
 
-### 测试与检查
+### Tests and checks
 
 ```bash
-uv run pytest                     # Python 测试
+uv run pytest                     # Python tests
 cd frontend && npm run lint       # oxlint
-cd frontend && npm run build      # tsc 类型检查 + 构建
+cd frontend && npm run build      # tsc type check + build
 ```
 
-### 打包发布
+### Packaging and release
 
 ```bash
-cd frontend && npm run build      # 先构建前端，产物需一并提交
-cd .. && uv build                 # 生成 dist/*.whl 与 sdist
+cd frontend && npm run build      # Build the frontend first; commit the output too
+cd .. && uv build                 # Produce dist/*.whl and sdist
 ```
 
-## API 概览
+## API overview
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/health` | 健康检查 |
-| GET | `/api/filesystem/roots` | 返回 OS 根目录 |
-| GET | `/api/filesystem/home` | 返回默认浏览目录（Linux/macOS 为家目录，Windows 为桌面） |
-| POST | `/api/filesystem/browse` | 浏览文件夹（子目录 + 图片 + 视频 + 可选 JSON） |
-| POST | `/api/filesystem/images` | 列出文件夹下图片 |
-| POST | `/api/filesystem/videos` | 列出文件夹下视频 |
-| GET | `/api/images/view` | 查看原图 |
-| GET | `/api/images/thumbnail` | 缩略图 + 直方图（`X-Histogram` 响应头） |
-| GET | `/api/images/histogram` | RGB 直方图与均值 |
-| GET | `/api/videos/info` | 视频信息（帧率、帧数、时长、分辨率） |
-| GET | `/api/videos/stream` | 可播放视频流（原生格式直连，其余转码缓存） |
-| GET | `/api/videos/frame` | 抽取指定帧 + 直方图 |
-| GET | `/api/videos/thumbnail` | 视频封面缩略图 + 直方图 |
-| GET | `/api/videos/histogram` | 指定帧直方图 fallback |
-| POST | `/api/annotations/check-path` | 校验标注输出路径（目录自动补默认文件名，返回是否已存在/可写） |
-| POST | `/api/annotations/load` | 读取标注 JSON |
-| POST | `/api/annotations/save` | 追加/替换写入标注（按“文件路径 + 问题”去重，支持 `image`/`video`） |
-| POST | `/api/blind-eval/setup` | 盲评初始化（交集、随机分份、每图窗口排列） |
-| POST | `/api/blind-eval/vote` | 盲评点赞投票（动态写入结果 JSON） |
-| POST | `/api/blind-eval/load` | 读取盲评结果 |
-| POST | `/api/blind-eval/save` | 写入盲评结果 |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Health check |
+| GET | `/api/filesystem/roots` | Return OS filesystem roots |
+| GET | `/api/filesystem/home` | Return the default browse directory (home on Linux/macOS, Desktop on Windows) |
+| POST | `/api/filesystem/browse` | Browse folders (subdirectories + images + videos + optional JSON) |
+| POST | `/api/filesystem/images` | List images in a folder |
+| POST | `/api/filesystem/videos` | List videos in a folder |
+| GET | `/api/images/view` | View an original image |
+| GET | `/api/images/thumbnail` | Thumbnail + histogram (`X-Histogram` response header) |
+| GET | `/api/images/histogram` | RGB histogram and means |
+| GET | `/api/videos/info` | Video metadata (fps, frame count, duration, resolution) |
+| GET | `/api/videos/stream` | Playable video stream (native formats direct, others via transcode cache) |
+| GET | `/api/videos/frame` | Extract a specific frame + histogram |
+| GET | `/api/videos/thumbnail` | Video cover thumbnail + histogram |
+| GET | `/api/videos/histogram` | Histogram fallback for a specific frame |
+| POST | `/api/annotations/check-path` | Validate annotation output path (adds a default filename for directories; returns exists/writable) |
+| POST | `/api/annotations/load` | Load annotation JSON |
+| POST | `/api/annotations/save` | Append/replace annotations (deduplicated by file path + question; supports `image`/`video`) |
+| POST | `/api/blind-eval/setup` | Initialize blind review (intersection, random parts, per-image window order) |
+| POST | `/api/blind-eval/vote` | Submit a blind-review vote (writes results JSON dynamically) |
+| POST | `/api/blind-eval/load` | Load blind-review results |
+| POST | `/api/blind-eval/save` | Save blind-review results |
 
-## 许可证
+## License
 
 [MIT](LICENSE)
