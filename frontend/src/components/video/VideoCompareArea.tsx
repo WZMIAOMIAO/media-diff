@@ -81,8 +81,8 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
     [selectedFolders, currentVideos],
   );
 
-  // keyboard: ←/→ switch video, a/d step frame, space play/pause, ↑/↓ zoom
-  // (zoom only while paused; playback resets to fit)
+  // keyboard: ←/→ switch video, a/d step frame, space play/pause, ↑/↓ zoom.
+  // Zoom/pan stays active during playback and is shared with the paused frame.
   const { stepFrame, togglePlay, isPlaying } = player;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -94,11 +94,9 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
         e.preventDefault();
         nextVideo();
       } else if (e.key === 'ArrowUp') {
-        if (isPlaying) return;
         e.preventDefault();
         zoomByAt(1.15, null, null);
       } else if (e.key === 'ArrowDown') {
-        if (isPlaying) return;
         e.preventDefault();
         zoomByAt(1 / 1.15, null, null);
       } else if (e.key === 'a' || e.key === 'A') {
@@ -122,12 +120,6 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
   useEffect(() => {
     resetFit();
   }, [videosKey, resetFit]);
-
-  // zoom is not applied while playing, so reset to fit when playback starts:
-  // pausing then keeps the fit size instead of jumping back to the old zoom.
-  useEffect(() => {
-    if (isPlaying) resetFit();
-  }, [isPlaying, resetFit]);
 
   // free frame caches from videos no longer selected (without touching frames
   // of currently displayed videos)

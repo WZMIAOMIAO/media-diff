@@ -95,6 +95,15 @@ export default function VideoWindow({
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 });
+  const naturalSizePathRef = useRef<string | null>(null);
+  // Intrinsic size of the currently playing <video>. The paused frame's
+  // naturalSize is only valid for the video it came from, so it must not leak
+  // into another video when switching during playback.
+  const [videoSize, setVideoSize] = useState<{
+    path: string | null;
+    w: number;
+    h: number;
+  }>({ path: null, w: 0, h: 0 });
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   const [isHovered, setIsHovered] = useState(false);
   const [overlayVideoPath, setOverlayVideoPath] = useState<string | null>(null);
@@ -157,7 +166,7 @@ export default function VideoWindow({
       .filter(Boolean)
       .join(' · ') || t('videoMeta.unavailable');
   const { zoom, panX, panY } = sharedZoom;
-  const canDrag = zoom > 1 && !isPlaying;
+  const canDrag = zoom > 1;
 
   // The browser cannot decode this codec, so the backend transcodes it first.
   const needsTranscode = !!video && videoInfo?.browser_playable === false;
@@ -423,17 +432,17 @@ export default function VideoWindow({
     return () => ro.disconnect();
   }, []);
 
-  // wheel zoom (paused only)
+  // wheel zoom (playing or paused; the frame/image and video share zoom/pan)
   useEffect(() => {
     const el = outerRef.current;
-    if (!el || isPlaying) return;
+    if (!el) return;
     const handler = (e: WheelEvent) => {
       e.preventDefault();
       const container = imgContainerRef.current;
-      const img = imgRef.current;
-      if (!container || !img) return;
+      const target = isPlaying ? videoElRef.current : imgRef.current;
+      if (!container || !target) return;
       const containerRect = container.getBoundingClientRect();
-      const imgRect = img.getBoundingClientRect();
+      const imgRect = target.getBoundingClientRect();
       const inBounds =
         e.clientX >= imgRect.left &&
         e.clientX <= imgRect.right &&
@@ -462,13 +471,18 @@ export default function VideoWindow({
     dragRef.current = null;
   };
   const onDoubleClick = (e: React.MouseEvent) => {
-    if (isPlaying) return;
     e.preventDefault();
     sharedZoom.resetFit();
   };
   const onImgLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
+    naturalSizePathRef.current = video?.path ?? null;
     setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+  };
+  const onVideoLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const el = e.currentTarget;
+    if (!video) return;
+    setVideoSize({ path: video.path, w: el.videoWidth, h: el.videoHeight });
   };
 
   const sampleAt = (clientX: number, clientY: number) => {
@@ -481,8 +495,19 @@ export default function VideoWindow({
     onSample(clientToUV(box, container, clientX, clientY));
   };
 
-  const srcW = naturalSize.w || videoInfo?.width || 0;
-  const srcH = naturalSize.h || videoInfo?.height || 0;
+  // Each size is only used for the video it belongs to. In particular, a
+  // paused frame from the previous video (horizontal) must not define the fit
+  // box after switching to a vertical video during playback.
+  const playingSize = videoSize.path === video?.path ? videoSize : null;
+  const pausedSize =
+    naturalSizePathRef.current === video?.path ? naturalSize : null;
+  const infoSize = videoInfo?.path === video?.path ? videoInfo : null;
+  const srcW = isPlaying
+    ? playingSize?.w || pausedSize?.w || infoSize?.width || 0
+    : pausedSize?.w || infoSize?.width || 0;
+  const srcH = isPlaying
+    ? playingSize?.h || pausedSize?.h || infoSize?.height || 0
+    : pausedSize?.h || infoSize?.height || 0;
   const fitRatio =
     srcW > 0 && srcH > 0 && containerSize.w > 0 && containerSize.h > 0
       ? Math.min(1, containerSize.w / srcW, containerSize.h / srcH)
@@ -598,6 +623,7 @@ export default function VideoWindow({
                 : undefined
             }
             ref={setVideoEl}
+            onLoadedMetadata={onVideoLoadedMetadata}
             onTimeUpdate={(e) => {
               player.onMainTimeUpdate(folderPath, e.currentTarget.currentTime);
             }}
@@ -627,9 +653,14 @@ export default function VideoWindow({
                 ? {
                     left: '50%',
                     top: '50%',
-                    transform: 'translate(-50%, -50%)',
+                    transform: `translate(-50%, -50%) translate(${panX}px, ${panY}px)`,
                     width: baseW * zoom,
                     height: baseH * zoom,
+                    // Tailwind's preflight caps media at max-width: 100% of the
+                    // container; that would stop the playing video from growing
+                    // when zoomed while the paused <img> wrapper does grow.
+                    maxWidth: 'none',
+                    maxHeight: 'none',
                   }
                 : { left: 0, top: 0, width: '100%', height: '100%' }),
             }}

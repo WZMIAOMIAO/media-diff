@@ -231,11 +231,11 @@ export const zh: Dict = {
   'help.group.videoSwitch': '视频切换',
   'help.prevVideo': '上一个视频',
   'help.nextVideo': '下一个视频',
-  'help.overlayVideo': '悬停窗口时按住数字键，覆盖显示对应窗口的当前帧（松开还原）',
+  'help.overlayVideo': '暂停时悬停窗口按住数字键，覆盖显示对应窗口的当前帧（松开还原）',
   'help.noteImage':
     '提示：取色模式下所有窗口会在相同的相对坐标处显示各自的颜色；缩放与平移在所有窗口间同步。',
   'help.noteVideo':
-    '提示：视频播放时取色按钮禁用，暂停后可正常取色；缩放与平移在所有窗口间同步。',
+    '提示：视频播放时取色按钮禁用，暂停后可正常取色；播放与暂停均可用缩放/平移，且切换时保持相同位置。',
   'help.key.wheel': '滚轮',
   'help.key.drag': '拖拽',
   'help.key.dblclick': '双击',
@@ -496,11 +496,11 @@ export const en: Dict = {
   'help.prevVideo': 'Previous video',
   'help.nextVideo': 'Next video',
   'help.overlayVideo':
-    "Hold a number key while hovering to overlay that window's current frame (release to restore)",
+    "While paused, hold a number key over a window to overlay that window's current frame (release to restore)",
   'help.noteImage':
     'Note: In pick mode, all windows show their own color at the same relative position; zoom and pan are synced across windows.',
   'help.noteVideo':
-    'Note: The color picker is disabled while playing; pause to pick colors. Zoom and pan are synced across windows.',
+    'Note: The color picker is disabled while playing; pause to pick colors. Zoom and pan work while playing or paused and keep the same position across the switch.',
   'help.key.wheel': 'Wheel',
   'help.key.drag': 'Drag',
   'help.key.dblclick': 'Double-click',
