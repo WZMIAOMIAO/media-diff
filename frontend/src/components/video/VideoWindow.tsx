@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { SharedZoomApi } from '../../hooks/useSharedZoom';
 import type { VideoPlayerApi } from '../../hooks/video/useVideoPlayer';
 import type { WatermarkConfig } from '../../types';
@@ -15,6 +16,7 @@ import ColorReadout, { type SamplePos } from '../ColorReadout';
 import VideoHistogramOverlay from './VideoHistogramOverlay';
 import CopyableFileName from '../CopyableFileName';
 import { useI18n } from '../../i18n';
+import { useWipeColorSlot, useWipeInfoSlot, useWipeOverlaySlot } from '../wipeInfoContext';
 
 interface WindowInfo {
   index: number;
@@ -36,13 +38,16 @@ interface VideoWindowProps {
   histogramEnabled: boolean;
   colorPickerEnabled: boolean;
   samplePos: SamplePos | null;
-  onSample: (pos: SamplePos | null) => void;
+  onSample: (pos: SamplePos | null, side?: 'first' | 'second') => void;
   /** Report this window's live transcode state (for playback gating). */
   onTranscodeState: (folderPath: string, state: TranscodeState) => void;
   watermarkConfig?: WatermarkConfig;
   allWindows: WindowInfo[];
   titlePosition?: 'top' | 'bottom';
   blindVote?: { alias: string; votedAlias: string | null; onVote: () => void } | null;
+  wipeMode?: boolean;
+  wipeSide?: 'first' | 'second';
+  showColorReadout?: boolean;
 }
 
 const PREFETCH_RANGE = 3;
@@ -89,8 +94,15 @@ export default function VideoWindow({
   allWindows,
   titlePosition = 'top',
   blindVote,
+  wipeMode = false,
+  wipeSide = 'first',
+  showColorReadout = true,
 }: VideoWindowProps) {
   const { t } = useI18n();
+  const wipeInfoSlot = useWipeInfoSlot(wipeSide);
+  const wipeHistogramSlot = useWipeOverlaySlot('histogram', wipeSide);
+  const wipeWatermarkSlot = useWipeOverlaySlot('watermark', wipeSide);
+  const wipeColorReadoutSlot = useWipeColorSlot();
   const { isPlaying, currentFrame, muted } = player;
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -358,7 +370,7 @@ export default function VideoWindow({
   const overlayInfo = overlayTarget ? videoInfos.get(overlayTarget.folderPath) : undefined;
   const overlayFrame = toOwnFrame(currentFrame, overlayInfo);
   useEffect(() => {
-    if (!overlayActive || !overlayVideoPath || isPlaying) {
+    if (wipeMode || !overlayActive || !overlayVideoPath || isPlaying) {
       setOverlayUrl(null);
       return;
     }
@@ -371,7 +383,7 @@ export default function VideoWindow({
     return () => {
       cancelled = true;
     };
-  }, [overlayActive, overlayVideoPath, overlayFrame, isPlaying]);
+  }, [overlayActive, overlayVideoPath, overlayFrame, isPlaying, wipeMode]);
 
   // Switching to another video invalidates any overlay (it referred to the
   // previous video); never carry it across.
@@ -379,6 +391,12 @@ export default function VideoWindow({
     setOverlayVideoPath(null);
     setOverlayUrl(null);
   }, [video?.path]);
+
+  useEffect(() => {
+    if (!wipeMode) return;
+    setOverlayVideoPath(null);
+    setOverlayUrl(null);
+  }, [wipeMode]);
 
   // A digit keyup can be lost when the window loses focus (alt-tab, switching to
   // another window before releasing). Clear the overlay then too so it cannot
@@ -401,7 +419,7 @@ export default function VideoWindow({
   // to React hover), so it survives windows re-rendering after group switches.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (isPlaying) return;
+      if (wipeMode || isPlaying) return;
       const num = parseInt(e.key, 10);
       if (!(num >= 1 && num <= allWindows.length && num - 1 !== index)) return;
       if (!isHovered && !isPointerInside(outerRef.current?.getBoundingClientRect())) return;
@@ -418,7 +436,7 @@ export default function VideoWindow({
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [isHovered, allWindows, index, isPlaying]);
+  }, [isHovered, allWindows, index, isPlaying, wipeMode]);
 
   // container size
   useEffect(() => {
@@ -456,19 +474,24 @@ export default function VideoWindow({
     return () => el.removeEventListener('wheel', handler);
   }, [isPlaying]);
 
-  const onMouseDown = (e: React.MouseEvent) => {
-    if (!canDrag) return;
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (!canDrag || e.button !== 0) return;
     e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { startX: e.clientX, startY: e.clientY, basePanX: panX, basePanY: panY };
   };
-  const onMouseMove = (e: React.MouseEvent) => {
+  const onPointerMove = (e: React.PointerEvent) => {
     if (!dragRef.current) return;
+    e.preventDefault();
     const dx = e.clientX - dragRef.current.startX;
     const dy = e.clientY - dragRef.current.startY;
     sharedZoom.setPan(dragRef.current.basePanX + dx, dragRef.current.basePanY + dy);
   };
-  const onMouseUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
     dragRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
   };
   const onDoubleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -492,7 +515,7 @@ export default function VideoWindow({
     if (!container || !el) return;
     const box = getContentBox(el, container);
     if (!box) return;
-    onSample(clientToUV(box, container, clientX, clientY));
+    onSample(clientToUV(box, container, clientX, clientY), wipeMode ? wipeSide : undefined);
   };
 
   // Each size is only used for the video it belongs to. In particular, a
@@ -571,7 +594,7 @@ export default function VideoWindow({
           <span className="text-xs text-[#e0e0e0] truncate">{t('window.noVideo')}</span>
         )}
       </span>
-      {!isPlaying && video && (
+      {!wipeMode && !isPlaying && video && (
         <OverlayButtons
           currentIndex={index}
           totalWindows={allWindows.length}
@@ -590,22 +613,26 @@ export default function VideoWindow({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => {
         setIsHovered(false);
-        onMouseUp();
         setOverlayVideoPath(null);
       }}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
       onContextMenu={(e) => e.preventDefault()}
       style={{ cursor }}
     >
-      {titlePosition === 'top' && header}
+      {!wipeMode && titlePosition === 'top' && header}
 
       <div
         ref={imgContainerRef}
         className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden"
-        style={{ cursor: colorPickerEnabled ? EYEDROPPER_CURSOR : undefined }}
+        style={{
+          cursor: colorPickerEnabled ? EYEDROPPER_CURSOR : undefined,
+          touchAction: canDrag ? 'none' : undefined,
+        }}
         onDoubleClick={onDoubleClick}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onLostPointerCapture={onPointerUp}
         onMouseMove={(e) => sampleAt(e.clientX, e.clientY)}
         onMouseLeave={() => {
           if (colorPickerEnabled) onSample(null);
@@ -640,6 +667,9 @@ export default function VideoWindow({
             }}
             onEnded={() => player.onVideoEnded(folderPath)}
             playsInline
+            disablePictureInPicture
+            disableRemotePlayback
+            controlsList="nodownload noplaybackrate noremoteplayback"
             muted={muted || !isMainVideo}
             className="absolute object-contain"
             style={{
@@ -690,7 +720,7 @@ export default function VideoWindow({
                     className={`block object-contain ${hasFit ? 'w-full h-full' : 'max-w-full max-h-full'}`}
                     draggable={false}
                   />
-                  {overlayActive && overlayUrl && (
+                  {!wipeMode && overlayActive && overlayUrl && (
                     <img
                       src={overlayUrl}
                       alt="overlay"
@@ -699,17 +729,27 @@ export default function VideoWindow({
                     />
                   )}
                 </div>
-                {histogramEnabled && (
-                  <div className="absolute top-1 left-1 z-10">
-                    <VideoHistogramOverlay
-                      videoPath={video.path}
-                      frame={effFrame}
-                      overlayVideoPath={overlayActive ? overlayVideoPath ?? undefined : undefined}
-                      overlayFrame={overlayActive ? overlayFrame : undefined}
-                    />
-                  </div>
-                )}
-                {!blindVote && (
+                {histogramEnabled &&
+                  (wipeMode
+                    ? wipeHistogramSlot &&
+                      createPortal(
+                        <VideoHistogramOverlay
+                          videoPath={video.path}
+                          frame={effFrame}
+                        />,
+                        wipeHistogramSlot,
+                      )
+                    : (
+                      <div className="absolute top-1 left-1 z-10">
+                        <VideoHistogramOverlay
+                          videoPath={video.path}
+                          frame={effFrame}
+                          overlayVideoPath={overlayActive ? overlayVideoPath ?? undefined : undefined}
+                          overlayFrame={overlayActive ? overlayFrame : undefined}
+                        />
+                      </div>
+                    ))}
+                {!wipeMode && !blindVote && (
                   <span className="absolute bottom-1 right-1 text-xs text-[#888888]">{fitPercent}%</span>
                 )}
               </>
@@ -719,13 +759,40 @@ export default function VideoWindow({
           </>
         )}
 
-        {video && totalVideos > 0 && (
+        {wipeMode &&
+          video &&
+          wipeInfoSlot &&
+          createPortal(
+            <div className="flex h-full min-w-0 items-center gap-2 px-2">
+              <CopyableFileName
+                name={video.name}
+                className="flex-1 text-xs text-[#e0e0e0]"
+              />
+              <span
+                className="shrink-0 max-w-[58%] truncate text-xs text-[#888888]"
+                title={metaTooltip}
+              >
+                {metaShort}
+              </span>
+              <span className="shrink-0 text-xs text-[#888888] tabular-nums">
+                {videoIndex + 1}/{totalVideos}
+              </span>
+              {ownFrameCount > 0 && (
+                <span className="shrink-0 text-xs text-[#888888] tabular-nums">
+                  {effFrame}/{ownFrameCount}
+                </span>
+              )}
+            </div>,
+            wipeInfoSlot,
+          )}
+
+        {!wipeMode && video && totalVideos > 0 && (
           <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-xs text-[#888888]">
             {videoIndex + 1}/{totalVideos}
           </span>
         )}
 
-        {video && ownFrameCount > 0 && (
+        {!wipeMode && video && ownFrameCount > 0 && (
           <span
             className="absolute bottom-1 left-1 z-10 text-xs text-[#cccccc] tabular-nums"
             title={t('window.framePosition')}
@@ -759,20 +826,36 @@ export default function VideoWindow({
           </div>
         )}
 
-        {video && watermarkConfig?.text && (
-          <div
-            className="absolute top-1 left-1/2 -translate-x-1/2 z-10 pointer-events-none"
-            style={watermarkTextStyle(
-              watermarkConfig.color,
-              watermarkConfig.fontSize,
-              watermarkConfig.outline,
-            )}
-          >
-            {watermarkConfig.text}
-          </div>
-        )}
+        {video &&
+          watermarkConfig?.text &&
+          (wipeMode
+            ? wipeWatermarkSlot &&
+              createPortal(
+                <div
+                  style={watermarkTextStyle(
+                    watermarkConfig.color,
+                    watermarkConfig.fontSize,
+                    watermarkConfig.outline,
+                  )}
+                >
+                  {watermarkConfig.text}
+                </div>,
+                wipeWatermarkSlot,
+              )
+            : (
+              <div
+                className="absolute top-1 left-1/2 -translate-x-1/2 z-10 pointer-events-none"
+                style={watermarkTextStyle(
+                  watermarkConfig.color,
+                  watermarkConfig.fontSize,
+                  watermarkConfig.outline,
+                )}
+              >
+                {watermarkConfig.text}
+              </div>
+            ))}
 
-        {blindVote && video && (
+        {!wipeMode && blindVote && video && (
           <button
             type="button"
             title={t('window.vote')}
@@ -803,16 +886,31 @@ export default function VideoWindow({
           </button>
         )}
 
-        <ColorReadout
-          containerRef={imgContainerRef}
-          sourceEl={pickerSource}
-          enabled={colorPickerEnabled}
-          samplePos={samplePos}
-          version={pickerVersion}
-        />
+        {wipeMode
+          ? showColorReadout &&
+            wipeColorReadoutSlot &&
+            createPortal(
+              <ColorReadout
+                containerRef={imgContainerRef}
+                sourceEl={pickerSource}
+                enabled={colorPickerEnabled}
+                samplePos={samplePos}
+                version={pickerVersion}
+              />,
+              wipeColorReadoutSlot,
+            )
+          : (
+            <ColorReadout
+              containerRef={imgContainerRef}
+              sourceEl={pickerSource}
+              enabled={colorPickerEnabled}
+              samplePos={samplePos}
+              version={pickerVersion}
+            />
+          )}
       </div>
 
-      {titlePosition === 'bottom' && header}
+      {!wipeMode && titlePosition === 'bottom' && header}
     </div>
   );
 }

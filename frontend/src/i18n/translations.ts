@@ -15,12 +15,17 @@ export const zh: Dict = {
   'common.copyFileName': '复制文件名',
   'common.searchImages': '搜索...',
   'common.searchVideos': '搜索视频...',
+  'dialog.notice': '提示',
+  'dialog.confirmTitle': '确认',
+  'dialog.ok': '确定',
+  'dialog.confirm': '确定',
 
   // top nav
   'nav.watermark': '水印',
   'nav.histogram': 'RGB直方图',
   'nav.annotation': '标注模式',
   'nav.blind': '盲评模式',
+  'nav.wipe': '擦除模式',
   'nav.imageMode': '图像模式',
   'nav.videoMode': '视频模式',
   'nav.switchMode': '切换模式',
@@ -29,6 +34,15 @@ export const zh: Dict = {
   'nav.language': '语言',
   'nav.alert.annotationBlindConflict': '标注模式和盲评模式不能同时开启，请先关闭当前模式',
   'nav.alert.comingSoon': '开发中',
+
+  // wipe compare
+  'wipe.needTwoFolders': '擦除模式仅支持两个对比文件夹',
+  'wipe.exitFirst': '请先退出擦除模式',
+  'wipe.exitOtherFirst': '请先退出标注或盲评模式，再开启擦除模式',
+  'wipe.locked.add': '擦除模式下不可新增对比文件夹，请先退出擦除模式',
+  'wipe.locked.remove': '擦除模式下不可删除对比文件夹，请先退出擦除模式',
+  'wipe.locked.clear': '擦除模式下不可清除对比文件夹，请先退出擦除模式',
+  'wipe.dividerHint': '拖动分割线对比，双击恢复 50%',
 
   // brand
   'brand.name': 'Media Diff',
@@ -275,12 +289,17 @@ export const en: Dict = {
   'common.copyFileName': 'Copy file name',
   'common.searchImages': 'Search...',
   'common.searchVideos': 'Search videos...',
+  'dialog.notice': 'Notice',
+  'dialog.confirmTitle': 'Confirm',
+  'dialog.ok': 'OK',
+  'dialog.confirm': 'Confirm',
 
   // top nav
   'nav.watermark': 'Watermark',
   'nav.histogram': 'RGB Histogram',
   'nav.annotation': 'Annotation',
   'nav.blind': 'Blind Review',
+  'nav.wipe': 'Wipe Mode',
   'nav.imageMode': 'Image',
   'nav.videoMode': 'Video',
   'nav.switchMode': 'Switch mode',
@@ -290,6 +309,19 @@ export const en: Dict = {
   'nav.alert.annotationBlindConflict':
     'Annotation and Blind Review cannot be enabled at the same time. Please turn off the current mode first.',
   'nav.alert.comingSoon': 'Coming soon',
+
+  // wipe compare
+  'wipe.needTwoFolders': 'Wipe Mode supports two comparison folders',
+  'wipe.exitFirst': 'Please exit Wipe Mode first',
+  'wipe.exitOtherFirst':
+    'Please exit Annotation or Blind Review first, then enable Wipe Mode',
+  'wipe.locked.add':
+    'Cannot add folders in Wipe Mode. Please exit Wipe Mode first.',
+  'wipe.locked.remove':
+    'Cannot remove folders in Wipe Mode. Please exit Wipe Mode first.',
+  'wipe.locked.clear':
+    'Cannot clear folders in Wipe Mode. Please exit Wipe Mode first.',
+  'wipe.dividerHint': 'Drag the divider to compare; double-click to reset to 50%',
 
   // brand
   'brand.name': 'Media Diff',

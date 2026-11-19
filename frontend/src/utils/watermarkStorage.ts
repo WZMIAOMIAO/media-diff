@@ -21,7 +21,10 @@ interface StoredStyle {
   outline?: boolean;
 }
 
-export function loadWatermarkStyle(key: string): WatermarkStyle | null {
+export function loadWatermarkStyle(
+  key: string,
+  defaultOutline = true,
+): WatermarkStyle | null {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
@@ -37,8 +40,10 @@ export function loadWatermarkStyle(key: string): WatermarkStyle | null {
     return {
       color: parsed.color,
       fontSize: parsed.fontSize,
-      // Outline defaults to on (incl. old v2 data without the field).
-      outline: parsed.outline !== false,
+      // Old v2 data without the field follows the mode's default (image off,
+      // video on); an explicit saved choice is preserved.
+      outline:
+        typeof parsed.outline === 'boolean' ? parsed.outline : defaultOutline,
     };
   } catch {
     return null;

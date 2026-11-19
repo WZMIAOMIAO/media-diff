@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { checkAnnotationPath, saveAnnotations } from '../api';
 import type { AnnotationApi, AnnotationEntry, AnnotationMedia } from '../types';
 import { t } from '../i18n/store';
+import { showAlert } from '../dialog/store';
 
 /** The compared paths stored in an entry (image or video). */
 export function annotationPaths(entry: AnnotationEntry): string[] {
@@ -142,21 +143,21 @@ export function useAnnotation({
     const paths = currentPathsRef.current;
     if (paths.length === 0) return;
     if (!question.trim()) {
-      alert(t('annotation.alert.questionRequired'));
+      void showAlert(t('annotation.alert.questionRequired'));
       return;
     }
     if (!result.trim()) {
-      alert(t('annotation.alert.resultRequired'));
+      void showAlert(t('annotation.alert.resultRequired'));
       return;
     }
     try {
       const check = await checkAnnotationPath(rt.outputPath, media);
       if (!check.writable) {
-        alert(t('annotation.alert.pathNotWritable'));
+        void showAlert(t('annotation.alert.pathNotWritable'));
         return;
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : t('annotation.alert.pathFailed'));
+      void showAlert(e instanceof Error ? e.message : t('annotation.alert.pathFailed'));
       return;
     }
     const payload: AnnotationEntry =
@@ -167,7 +168,7 @@ export function useAnnotation({
       rt.entries = await saveAnnotations(rt.outputPath, [payload], media);
       forceUpdate();
     } catch (e) {
-      alert(e instanceof Error ? e.message : t('annotation.alert.saveFailed'));
+      void showAlert(e instanceof Error ? e.message : t('annotation.alert.saveFailed'));
     }
   }, [media, question, result, forceUpdate]);
 

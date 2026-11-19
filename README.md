@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 > All code in this project was developed by GLM5.2 and DeepseekV4.1Flash.
 
-A browser-based image and video comparison / annotation / blind-review tool that can be deployed locally or remotely. It supports single, dual, triple, and quad image views, synchronized zoom and pan, histogram overlays, and frame-by-frame video comparison (synchronized playback plus paused-frame extraction for pixel-level inspection).
+A browser-based image and video comparison / annotation / blind-review tool that can be deployed locally or remotely. It supports single, dual, triple, and quad image views, synchronized zoom and pan, histogram overlays, frame-by-frame video comparison (synchronized playback plus paused-frame extraction for pixel-level inspection), and a two-folder wipe mode for images and videos.
 
 The frontend build is shipped inside the Python package, so a single command is enough after installation — **Node.js is not required**. You can also deploy it to a server with `--host 0.0.0.0` for remote access (see [Remote deployment](#remote-deployment)).
 
@@ -17,6 +17,10 @@ Image comparison mode (multi-window synchronized zoom, RGB histograms, window wa
 Video comparison mode (multi-window frame-by-frame comparison, speed control, auto-advance, RGB histograms, window watermarks, annotation, blind review, etc.):
 
 ![Video comparison mode](assets/screenshots/video-compare.png)
+
+Video wipe mode (two-folder split view, synchronized playback, draggable divider):
+
+![Video wipe mode](assets/screenshots/video-wipe.png)
 
 ## Installation
 

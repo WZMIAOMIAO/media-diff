@@ -8,6 +8,7 @@ import type { WatermarkConfig } from '../../types';
 import type { VideoEntry } from '../../types/video';
 import type { SamplePos } from '../ColorReadout';
 import VideoWindow from './VideoWindow';
+import WipeStack from '../WipeStack';
 import PlayerBar from './PlayerBar';
 import { useI18n } from '../../i18n';
 
@@ -60,14 +61,19 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
   const { t } = useI18n();
   const sharedZoom = useSharedZoom();
   const { zoomByAt } = sharedZoom;
-  const { selectedFolders, filteredVideos, currentVideos, currentVideoIndices, videoInfos, nextVideo, prevVideo, blind, allVideosReady, reportTranscodeState } = compare;
+  const { selectedFolders, filteredVideos, currentVideos, currentVideoIndices, videoInfos, nextVideo, prevVideo, blind, wipe, allVideosReady, reportTranscodeState } = compare;
   // Playback cannot start while any displayed video is still transcoding.
   const playDisabled = !allVideosReady;
   const [samplePos, setSamplePos] = useState<SamplePos | null>(null);
+  const [sampleSide, setSampleSide] = useState<'first' | 'second' | null>(null);
 
-  const handleSample = useCallback((pos: SamplePos | null) => {
-    setSamplePos(pos);
-  }, []);
+  const handleSample = useCallback(
+    (pos: SamplePos | null, side?: 'first' | 'second') => {
+      setSamplePos(pos);
+      setSampleSide(pos ? side ?? null : null);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!colorPickerEnabled) setSamplePos(null);
@@ -214,6 +220,9 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
         watermarkConfig={watermarkConfigs[i]}
         allWindows={allWindows}
         titlePosition={selectedFolders.length === 4 && i >= 2 ? 'bottom' : 'top'}
+        wipeMode={wipe}
+        wipeSide={i === 0 ? 'first' : 'second'}
+        showColorReadout={!wipe || sampleSide === (i === 0 ? 'first' : 'second')}
         blindVote={
           blind && blindName && w.video
             ? {
@@ -232,7 +241,9 @@ function VideoCompareArea({ compare, player, histogramEnabled, colorPickerEnable
   };
 
   const windowsArea =
-    selectedFolders.length === 4 ? (
+    wipe && selectedFolders.length === 2 ? (
+      <WipeStack first={renderWindow(0)} second={renderWindow(1)} />
+    ) : selectedFolders.length === 4 ? (
       <div className="flex-1 min-h-0 grid grid-cols-2 grid-rows-2 gap-px bg-[#3c3c3c]">
         {renderWindow(0)}
         {renderWindow(1)}

@@ -15,6 +15,7 @@ import type {
 } from '../../types';
 import { useAnnotation, buildPathGroups } from '../useAnnotation';
 import { t } from '../../i18n/store';
+import { showAlert } from '../../dialog/store';
 
 const VIDEO_COMMON_TEXTS_KEY = 'video_viewer_common_texts';
 
@@ -72,6 +73,10 @@ export interface UseVideoCompareReturn {
   annotation: AnnotationApi | null;
   enterAnnotation: (outputPath: string, entries: AnnotationEntry[]) => void;
   exitAnnotation: () => void;
+
+  // Wipe compare mode
+  wipe: boolean;
+  setWipe: (active: boolean) => void;
 }
 
 interface BlindRuntime {
@@ -159,6 +164,12 @@ export function useVideoCompare(): UseVideoCompareReturn {
   const [searchQuery, setSearchQuery] = useState('');
   const [intersectionMode, setIntersectionModeState] = useState(false);
   const [recursiveMode, setRecursiveModeState] = useState(false);
+  const [wipe, setWipeState] = useState(false);
+  const wipeRef = useRef(false);
+  const setWipe = useCallback((active: boolean) => {
+    wipeRef.current = active;
+    setWipeState(active);
+  }, []);
   const recursiveRef = useRef(recursiveMode);
   const [truncated, setTruncated] = useState(false);
 
@@ -369,14 +380,18 @@ export function useVideoCompare(): UseVideoCompareReturn {
 
   const addFolder = useCallback(
     async (path: string) => {
+      if (wipeRef.current) {
+        void showAlert(t('wipe.locked.add'));
+        return;
+      }
       if (blindRef.current) {
-        alert(t('blind.locked.add'));
+        void showAlert(t('blind.locked.add'));
         return;
       }
       const trimmed = path.trim();
       if (!trimmed) return;
       if (foldersRef.current.length >= 4) {
-        alert(t('limit.folders'));
+        void showAlert(t('limit.folders'));
         return;
       }
       if (foldersRef.current.some((f) => f.path === trimmed)) return;
@@ -405,8 +420,12 @@ export function useVideoCompare(): UseVideoCompareReturn {
 
   const removeFolder = useCallback(
     (path: string) => {
+      if (wipeRef.current) {
+        void showAlert(t('wipe.locked.remove'));
+        return;
+      }
       if (blindRef.current) {
-        alert(t('blind.locked.remove'));
+        void showAlert(t('blind.locked.remove'));
         return;
       }
       foldersRef.current = foldersRef.current.filter((f) => f.path !== path);
@@ -454,8 +473,12 @@ export function useVideoCompare(): UseVideoCompareReturn {
   );
 
   const clearFolders = useCallback(() => {
+    if (wipeRef.current) {
+      void showAlert(t('wipe.locked.clear'));
+      return;
+    }
     if (blindRef.current) {
-      alert(t('blind.locked.clear'));
+      void showAlert(t('blind.locked.clear'));
       return;
     }
     foldersRef.current = [];
@@ -619,7 +642,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
   const setRecursiveMode = useCallback(
     async (b: boolean) => {
       if (blindRef.current) {
-        alert(t('blind.locked.recursive'));
+        void showAlert(t('blind.locked.recursive'));
         return;
       }
       if (b === recursiveRef.current) return;
@@ -743,7 +766,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
         blind.winLists = winListsFromData(data, blind.aliases);
         forceUpdate();
       } catch (e) {
-        alert(e instanceof Error ? e.message : t('blind.voteFailed'));
+        void showAlert(e instanceof Error ? e.message : t('blind.voteFailed'));
       }
     },
     [forceUpdate],
@@ -832,5 +855,7 @@ export function useVideoCompare(): UseVideoCompareReturn {
     annotation,
     enterAnnotation,
     exitAnnotation,
+    wipe,
+    setWipe,
   };
 }

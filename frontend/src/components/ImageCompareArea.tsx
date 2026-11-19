@@ -5,6 +5,7 @@ import type { WatermarkConfig, SelectedFolder } from '../types';
 import type { FileEntry } from '../api';
 import type { SamplePos } from './ColorReadout';
 import ImageWindow from './ImageWindow';
+import WipeStack from './WipeStack';
 import { useI18n } from '../i18n';
 
 interface ImageCompareAreaProps {
@@ -24,12 +25,17 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
   const { t } = useI18n();
   const sharedZoom = useSharedZoom();
   const { zoomByAt, resetFit } = sharedZoom;
-  const { selectedFolders, filteredImages, currentIndices, nextImage, prevImage, blind } = compare;
+  const { selectedFolders, filteredImages, currentIndices, nextImage, prevImage, blind, wipe } = compare;
   const [samplePos, setSamplePos] = useState<SamplePos | null>(null);
+  const [sampleSide, setSampleSide] = useState<'first' | 'second' | null>(null);
 
-  const handleSample = useCallback((pos: SamplePos | null) => {
-    setSamplePos(pos);
-  }, []);
+  const handleSample = useCallback(
+    (pos: SamplePos | null, side?: 'first' | 'second') => {
+      setSamplePos(pos);
+      setSampleSide(pos ? side ?? null : null);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!colorPickerEnabled) setSamplePos(null);
@@ -115,6 +121,9 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
         watermarkConfig={watermarkConfigs[i]}
         allWindows={allWindows}
         titlePosition={selectedFolders.length === 4 && i >= 2 ? 'bottom' : 'top'}
+        wipeMode={wipe}
+        wipeSide={i === 0 ? 'first' : 'second'}
+        showColorReadout={!wipe || sampleSide === (i === 0 ? 'first' : 'second')}
         blindVote={
           blind && blindName
             ? {
@@ -131,6 +140,14 @@ function ImageCompareArea({ compare, histogramEnabled, colorPickerEnabled, water
       />
     );
   };
+
+  if (wipe && selectedFolders.length === 2) {
+    return (
+      <main className="flex-1 min-w-0 min-h-0 flex flex-col">
+        <WipeStack first={renderWindow(0)} second={renderWindow(1)} />
+      </main>
+    );
+  }
 
   if (selectedFolders.length === 4) {
     return (

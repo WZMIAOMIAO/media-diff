@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { SharedZoomApi } from '../hooks/useSharedZoom';
 import type { SelectedFolder, WatermarkConfig } from '../types';
 import type { FileEntry } from '../api';
@@ -11,6 +12,7 @@ import HistogramOverlay from './HistogramOverlay';
 import ColorReadout, { type SamplePos } from './ColorReadout';
 import CopyableFileName from './CopyableFileName';
 import { useI18n } from '../i18n';
+import { useWipeColorSlot, useWipeInfoSlot, useWipeOverlaySlot } from './wipeInfoContext';
 
 interface WindowInfo {
   index: number;
@@ -51,11 +53,14 @@ interface ImageWindowProps {
   histogramEnabled: boolean;
   colorPickerEnabled: boolean;
   samplePos: SamplePos | null;
-  onSample: (pos: SamplePos | null) => void;
+  onSample: (pos: SamplePos | null, side?: 'first' | 'second') => void;
   watermarkConfig?: WatermarkConfig;
   allWindows: WindowInfo[];
   titlePosition?: 'top' | 'bottom';
   blindVote?: { alias: string; votedAlias: string | null; onVote: () => void } | null;
+  wipeMode?: boolean;
+  wipeSide?: 'first' | 'second';
+  showColorReadout?: boolean;
 }
 
 export default function ImageWindow({
@@ -72,8 +77,15 @@ export default function ImageWindow({
   allWindows,
   titlePosition = 'top',
   blindVote,
+  wipeMode = false,
+  wipeSide = 'first',
+  showColorReadout = true,
 }: ImageWindowProps) {
   const { t } = useI18n();
+  const wipeInfoSlot = useWipeInfoSlot(wipeSide);
+  const wipeHistogramSlot = useWipeOverlaySlot('histogram', wipeSide);
+  const wipeWatermarkSlot = useWipeOverlaySlot('watermark', wipeSide);
+  const wipeColorReadoutSlot = useWipeColorSlot();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [resolution, setResolution] = useState('');
@@ -181,6 +193,7 @@ export default function ImageWindow({
     // mouseenter/mouseleave did not fire (e.g. a modal closed under a
     // stationary cursor, or windows re-render after switching groups).
     const onKeyDown = (e: KeyboardEvent) => {
+      if (wipeMode) return;
       const num = parseInt(e.key, 10);
       if (!(num >= 1 && num <= allWindows.length && num - 1 !== index)) return;
       if (!isHovered && !isPointerInside(outerRef.current?.getBoundingClientRect())) return;
@@ -197,10 +210,10 @@ export default function ImageWindow({
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [isHovered, allWindows, index]);
+  }, [isHovered, allWindows, index, wipeMode]);
 
   useEffect(() => {
-    if (!histogramEnabled) return;
+    if (wipeMode || !histogramEnabled) return;
     for (const w of allWindows) {
       if (w.image && w.index !== index) {
         const p = w.image.path;
@@ -209,7 +222,7 @@ export default function ImageWindow({
         }
       }
     }
-  }, [histogramEnabled, allWindows, index]);
+  }, [histogramEnabled, allWindows, index, wipeMode]);
 
   useEffect(() => {
     const el = imgContainerRef.current;
@@ -259,21 +272,26 @@ export default function ImageWindow({
     return () => el.removeEventListener('wheel', handler);
   }, []);
 
-  const onMouseDown = (e: React.MouseEvent) => {
-    if (!canDrag) return;
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (!canDrag || e.button !== 0) return;
     e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { startX: e.clientX, startY: e.clientY, basePanX: panX, basePanY: panY };
   };
 
-  const onMouseMove = (e: React.MouseEvent) => {
+  const onPointerMove = (e: React.PointerEvent) => {
     if (!dragRef.current) return;
+    e.preventDefault();
     const dx = e.clientX - dragRef.current.startX;
     const dy = e.clientY - dragRef.current.startY;
     sharedZoom.setPan(dragRef.current.basePanX + dx, dragRef.current.basePanY + dy);
   };
 
-  const onMouseUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
     dragRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
   };
 
   const onDoubleClick = (e: React.MouseEvent) => {
@@ -294,7 +312,7 @@ export default function ImageWindow({
     if (!container || !el) return;
     const box = getContentBox(el, container);
     if (!box) return;
-    onSample(clientToUV(box, container, clientX, clientY));
+    onSample(clientToUV(box, container, clientX, clientY), wipeMode ? wipeSide : undefined);
   };
 
   const srcW = naturalSize.w;
@@ -344,25 +362,36 @@ export default function ImageWindow({
     </div>
   );
 
+  useEffect(() => {
+    if (!wipeMode) return;
+    setOverlayPath(null);
+    setOverlayUrl(null);
+  }, [wipeMode]);
+
   return (
     <div
       ref={outerRef}
       className="relative h-full w-full overflow-hidden bg-[#1e1e1e] flex flex-col select-none"
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => { setIsHovered(false); onMouseUp(); setOverlayPath(null); }}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
+      onMouseLeave={() => { setIsHovered(false); setOverlayPath(null); }}
       onContextMenu={(e) => e.preventDefault()}
       style={{ cursor }}
     >
-      {titlePosition === 'top' && header}
+      {!wipeMode && titlePosition === 'top' && header}
 
       <div
         ref={imgContainerRef}
         className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden"
-        style={{ cursor: colorPickerEnabled ? EYEDROPPER_CURSOR : undefined }}
+        style={{
+          cursor: colorPickerEnabled ? EYEDROPPER_CURSOR : undefined,
+          touchAction: canDrag ? 'none' : undefined,
+        }}
         onDoubleClick={onDoubleClick}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onLostPointerCapture={onPointerUp}
         onMouseMove={(e) => sampleAt(e.clientX, e.clientY)}
         onMouseLeave={() => {
           if (colorPickerEnabled) onSample(null);
@@ -389,7 +418,7 @@ export default function ImageWindow({
                 className={`block object-contain ${hasFit ? 'w-full h-full' : 'max-w-full max-h-full'}`}
                 draggable={false}
               />
-              {overlayActive && overlayUrl && (
+              {!wipeMode && overlayActive && overlayUrl && (
                 <img
                   src={overlayUrl}
                   alt="overlay"
@@ -398,33 +427,58 @@ export default function ImageWindow({
                 />
               )}
             </div>
-            {histogramEnabled && image && (
-              <div className="absolute top-1 left-1 z-10">
-                <HistogramOverlay
-                  imagePath={image.path}
-                  overlayImagePath={overlayActive ? overlayPath ?? undefined : undefined}
-                />
-              </div>
+            {histogramEnabled &&
+              image &&
+              (wipeMode
+                ? wipeHistogramSlot &&
+                  createPortal(
+                    <HistogramOverlay imagePath={image.path} />,
+                    wipeHistogramSlot,
+                  )
+                : (
+                  <div className="absolute top-1 left-1 z-10">
+                    <HistogramOverlay
+                      imagePath={image.path}
+                      overlayImagePath={overlayActive ? overlayPath ?? undefined : undefined}
+                    />
+                  </div>
+                ))}
+            {watermarkConfig?.text &&
+              (wipeMode
+                ? wipeWatermarkSlot &&
+                  createPortal(
+                    <div
+                      style={watermarkTextStyle(
+                        watermarkConfig.color,
+                        watermarkConfig.fontSize,
+                        watermarkConfig.outline,
+                      )}
+                    >
+                      {watermarkConfig.text}
+                    </div>,
+                    wipeWatermarkSlot,
+                  )
+                : (
+                  <div
+                    className="absolute top-1 left-1/2 -translate-x-1/2 z-10 pointer-events-none"
+                    style={watermarkTextStyle(
+                      watermarkConfig.color,
+                      watermarkConfig.fontSize,
+                      watermarkConfig.outline,
+                    )}
+                  >
+                    {watermarkConfig.text}
+                  </div>
+                ))}
+            {!wipeMode && (
+              <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-xs text-[#888888]">
+                {imageIndex + 1}/{totalImages}
+              </span>
             )}
-            {watermarkConfig?.text && (
-              <div
-                className="absolute top-1 left-1/2 -translate-x-1/2 z-10 pointer-events-none"
-                style={watermarkTextStyle(
-                  watermarkConfig.color,
-                  watermarkConfig.fontSize,
-                  watermarkConfig.outline,
-                )}
-              >
-                {watermarkConfig.text}
-              </div>
-            )}
-            <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-xs text-[#888888]">
-              {imageIndex + 1}/{totalImages}
-            </span>
-            {!blindVote && (
+            {!wipeMode && !blindVote && (
               <span className="absolute bottom-1 right-1 text-xs text-[#888888]">{fitPercent}%</span>
             )}
-            {blindVote && (
+            {!wipeMode && blindVote && (
               <button
                 type="button"
                 title={t('window.vote')}
@@ -459,16 +513,53 @@ export default function ImageWindow({
           <span className="text-sm text-[#888888]">{t('common.loading')}</span>
         )}
 
-        <ColorReadout
-          containerRef={imgContainerRef}
-          sourceEl={imgRef.current}
-          enabled={colorPickerEnabled}
-          samplePos={samplePos}
-          version={pickerVersion}
-        />
+        {wipeMode &&
+          image &&
+          wipeInfoSlot &&
+          createPortal(
+            <div className="flex h-full min-w-0 items-center gap-2 px-2">
+              <CopyableFileName
+                name={image.name}
+                className="flex-1 text-xs text-[#e0e0e0]"
+              />
+              <span className="shrink-0 text-xs text-[#888888]" title={resolution}>
+                {resolution}
+              </span>
+              <span className="shrink-0 text-xs text-[#888888] tabular-nums">
+                {imageIndex + 1}/{totalImages}
+              </span>
+              <span className="shrink-0 text-xs text-[#888888] tabular-nums">
+                {fitPercent}%
+              </span>
+            </div>,
+            wipeInfoSlot,
+          )}
+
+        {wipeMode
+          ? showColorReadout &&
+            wipeColorReadoutSlot &&
+            createPortal(
+              <ColorReadout
+                containerRef={imgContainerRef}
+                sourceEl={imgRef.current}
+                enabled={colorPickerEnabled}
+                samplePos={samplePos}
+                version={pickerVersion}
+              />,
+              wipeColorReadoutSlot,
+            )
+          : (
+            <ColorReadout
+              containerRef={imgContainerRef}
+              sourceEl={imgRef.current}
+              enabled={colorPickerEnabled}
+              samplePos={samplePos}
+              version={pickerVersion}
+            />
+          )}
       </div>
 
-      {titlePosition === 'bottom' && header}
+      {!wipeMode && titlePosition === 'bottom' && header}
     </div>
   );
 }

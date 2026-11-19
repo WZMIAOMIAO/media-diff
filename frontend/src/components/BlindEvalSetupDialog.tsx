@@ -3,6 +3,7 @@ import { setupBlindEval } from '../api';
 import type { BlindMedia, BlindSetupResult, SelectedFolder } from '../types';
 import BrowseFolderDialog from './BrowseFolderDialog';
 import { useI18n } from '../i18n';
+import { showAlert, showConfirm } from '../dialog/store';
 
 interface BlindEvalSetupDialogProps {
   folders: SelectedFolder[];
@@ -74,16 +75,14 @@ function BlindEvalSetupDialog({
         recursive,
       });
       if (result.existing_file_matched && !loadExisting) {
-        const load = window.confirm(
-          t('blind.confirm.loadExisting'),
-        );
+        const load = await showConfirm(t('blind.confirm.loadExisting'));
         if (!load) return;
         await runSetup(true);
         return;
       }
       onEnter(result);
     } catch (e) {
-      alert(e instanceof Error ? e.message : t('blind.alert.enterFailed'));
+      void showAlert(e instanceof Error ? e.message : t('blind.alert.enterFailed'));
     } finally {
       setLoading(false);
     }
@@ -91,21 +90,21 @@ function BlindEvalSetupDialog({
 
   const handleSubmit = () => {
     if (!outputPath.trim()) {
-      alert(t('blind.alert.outputRequired'));
+      void showAlert(t('blind.alert.outputRequired'));
       return;
     }
     const parts = Number(totalParts);
     const part = Number(currentPart);
     if (!Number.isInteger(parts) || parts < 1) {
-      alert(t('blind.alert.partsMin'));
+      void showAlert(t('blind.alert.partsMin'));
       return;
     }
     if (!Number.isInteger(part) || part < 1 || part > parts) {
-      alert(t('blind.alert.partRange'));
+      void showAlert(t('blind.alert.partRange'));
       return;
     }
     if (parts > total) {
-      alert(t('blind.alert.partsTooMany', { noun, total }));
+      void showAlert(t('blind.alert.partsTooMany', { noun, total }));
       return;
     }
     void runSetup(false);

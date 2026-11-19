@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ImageComparePage from './pages/ImageComparePage';
 import VideoComparePage from './pages/VideoComparePage';
 import DownloadProgress from './components/DownloadProgress';
+import AppDialog from './dialog/AppDialog';
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
         <Route path="*" element={<Navigate to="/image" replace />} />
       </Routes>
       <DownloadProgress />
+      <AppDialog />
     </BrowserRouter>
   );
 }

@@ -16,13 +16,14 @@ import { useImageCompare } from '../hooks/useImageCompare';
 import { useImagePrefetch } from '../hooks/useImagePrefetch';
 import { useWatermark } from '../hooks/useWatermark';
 import { IMAGE_WATERMARK_KEY } from '../utils/watermarkStorage';
+import { showAlert, showConfirm } from '../dialog/store';
 
 export default function ImageComparePage() {
   const { t, lang } = useI18n();
   const compare = useImageCompare();
   const [histogramEnabled, setHistogramEnabled] = useState(false);
   const [colorPickerEnabled, setColorPickerEnabled] = useState(false);
-  const watermark = useWatermark(IMAGE_WATERMARK_KEY);
+  const watermark = useWatermark(IMAGE_WATERMARK_KEY, false);
   const [watermarkDialogOpen, setWatermarkDialogOpen] = useState(false);
   const [blindSetupOpen, setBlindSetupOpen] = useState(false);
   const [blindInfoOpen, setBlindInfoOpen] = useState(false);
@@ -50,11 +51,15 @@ export default function ImageComparePage() {
     };
   }, [colorPickerEnabled]);
 
-  const handleBlindToggle = () => {
+  const handleBlindToggle = async () => {
+    if (compare.wipe) {
+      void showAlert(t('wipe.exitFirst'));
+      return;
+    }
     if (compare.blind) {
       if (
         compare.blind.votedCount > 0 &&
-        !confirm(t('blind.exitConfirm'))
+        !(await showConfirm(t('blind.exitConfirm')))
       ) {
         return;
       }
@@ -62,35 +67,56 @@ export default function ImageComparePage() {
       return;
     }
     if (compare.annotation) {
-      alert(t('nav.alert.annotationBlindConflict'));
+      void showAlert(t('nav.alert.annotationBlindConflict'));
       return;
     }
     if (compare.selectedFolders.length < 2) {
-      alert(t('blind.needFolders'));
+      void showAlert(t('blind.needFolders'));
       return;
     }
     setBlindSetupOpen(true);
   };
 
   const handleAnnotationToggle = () => {
+    if (compare.wipe) {
+      void showAlert(t('wipe.exitFirst'));
+      return;
+    }
     if (compare.annotation) {
       compare.exitAnnotation();
       return;
     }
     if (compare.blind) {
-      alert(t('nav.alert.annotationBlindConflict'));
+      void showAlert(t('nav.alert.annotationBlindConflict'));
       return;
     }
     const count = compare.selectedFolders.length;
     if (count === 0) {
-      alert(t('annotation.needFolders'));
+      void showAlert(t('annotation.needFolders'));
       return;
     }
     if (count > 3) {
-      alert(t('annotation.tooManyFolders'));
+      void showAlert(t('annotation.tooManyFolders'));
       return;
     }
     setAnnotationSetupOpen(true);
+  };
+
+  const handleWipeToggle = () => {
+    if (compare.wipe) {
+      compare.setWipe(false);
+      return;
+    }
+    if (compare.annotation || compare.blind) {
+      void showAlert(t('wipe.exitOtherFirst'));
+      return;
+    }
+    if (compare.selectedFolders.length !== 2) {
+      void showAlert(t('wipe.needTwoFolders'));
+      return;
+    }
+    setWatermarkDialogOpen(false);
+    compare.setWipe(true);
   };
 
   const handleMoveFolder = (from: number, to: number) => {
@@ -109,6 +135,8 @@ export default function ImageComparePage() {
         onAnnotationToggle={handleAnnotationToggle}
         blindActive={!!compare.blind}
         onBlindToggle={handleBlindToggle}
+        wipeActive={compare.wipe}
+        onWipeToggle={handleWipeToggle}
       />
       <div className="flex-1 flex min-h-0">
         <Sidebar compare={compare} onMoveFolder={handleMoveFolder} />

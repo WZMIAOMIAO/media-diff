@@ -20,6 +20,8 @@ interface VideoTopNavProps {
   onAnnotationToggle: () => void;
   blindActive: boolean;
   onBlindToggle: () => void;
+  wipeActive: boolean;
+  onWipeToggle: () => void;
 }
 
 function VideoTopNav({
@@ -33,6 +35,8 @@ function VideoTopNav({
   onAnnotationToggle,
   blindActive,
   onBlindToggle,
+  wipeActive,
+  onWipeToggle,
 }: VideoTopNavProps) {
   const { t } = useI18n();
   const [helpOpen, setHelpOpen] = useState(false);
@@ -64,6 +68,12 @@ function VideoTopNav({
             onChange={onHistogramToggle}
             color="#4a9eff"
             label={t('nav.histogram')}
+          />
+          <Toggle
+            checked={wipeActive}
+            onChange={onWipeToggle}
+            color="#4a9eff"
+            label={t('nav.wipe')}
           />
           <Toggle
             checked={annotationActive}

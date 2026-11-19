@@ -3,6 +3,7 @@ import BrowseFolderDialog from '../BrowseFolderDialog';
 import { getDefaultBrowsePath } from '../../api';
 import type { AddRootResult } from '../../types/video';
 import { useI18n } from '../../i18n';
+import { showAlert } from '../../dialog/store';
 
 interface VideoFolderInputProps {
   onAddRoot: (path: string) => Promise<AddRootResult>;
@@ -31,9 +32,9 @@ function VideoFolderInput({ onAddRoot }: VideoFolderInputProps) {
     if (!trimmed) return;
     const result = await onAddRoot(trimmed);
     if (result === 'not_exist') {
-      alert(t('folderInput.notExist'));
+      void showAlert(t('folderInput.notExist'));
     } else if (result === 'exists') {
-      alert(t('folderInput.exists'));
+      void showAlert(t('folderInput.exists'));
     } else {
       setValue('');
     }

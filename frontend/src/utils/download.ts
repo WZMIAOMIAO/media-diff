@@ -1,4 +1,5 @@
 import { t } from '../i18n/store';
+import { showAlert } from '../dialog/store';
 
 const API_BASE = '/api';
 
@@ -95,7 +96,7 @@ export async function downloadFile(path: string): Promise<void> {
     const res = await fetch(url, { method: 'HEAD' });
     if (!res.ok) throw new Error('head failed');
   } catch {
-    window.alert(t('download.error'));
+    void showAlert(t('download.error'));
     return;
   }
   triggerDownload(url);

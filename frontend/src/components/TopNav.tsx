@@ -19,6 +19,8 @@ interface TopNavProps {
   onAnnotationToggle: () => void;
   blindActive: boolean;
   onBlindToggle: () => void;
+  wipeActive: boolean;
+  onWipeToggle: () => void;
 }
 
 function TopNav({
@@ -31,6 +33,8 @@ function TopNav({
   onAnnotationToggle,
   blindActive,
   onBlindToggle,
+  wipeActive,
+  onWipeToggle,
 }: TopNavProps) {
   const { t } = useI18n();
   const [helpOpen, setHelpOpen] = useState(false);
@@ -57,7 +61,18 @@ function TopNav({
           >
             {t('nav.watermark')}
           </button>
-          <Toggle checked={histogramEnabled} onChange={onHistogramToggle} color="#4a9eff" label={t('nav.histogram')} />
+          <Toggle
+            checked={histogramEnabled}
+            onChange={onHistogramToggle}
+            color="#4a9eff"
+            label={t('nav.histogram')}
+          />
+          <Toggle
+            checked={wipeActive}
+            onChange={onWipeToggle}
+            color="#4a9eff"
+            label={t('nav.wipe')}
+          />
           <Toggle
             checked={annotationActive}
             onChange={onAnnotationToggle}

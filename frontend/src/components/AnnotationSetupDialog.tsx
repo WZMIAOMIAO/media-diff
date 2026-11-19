@@ -3,6 +3,7 @@ import { checkAnnotationPath, loadAnnotations } from '../api';
 import type { AnnotationEntry, AnnotationMedia, SelectedFolder } from '../types';
 import BrowseFolderDialog from './BrowseFolderDialog';
 import { useI18n } from '../i18n';
+import { showAlert, showConfirm } from '../dialog/store';
 
 interface AnnotationSetupDialogProps {
   folders: SelectedFolder[];
@@ -43,7 +44,7 @@ function AnnotationSetupDialog({
   const handleSubmit = async () => {
     const raw = outputPath.trim();
     if (!raw) {
-      alert(t('annotation.alert.outputRequired'));
+      void showAlert(t('annotation.alert.outputRequired'));
       return;
     }
     const resolved = resolveDisplayPath(raw, defaultFilename);
@@ -51,17 +52,17 @@ function AnnotationSetupDialog({
     try {
       const check = await checkAnnotationPath(resolved, media);
       if (!check.writable) {
-        alert(t('annotation.alert.pathNotWritable'));
+        void showAlert(t('annotation.alert.pathNotWritable'));
         return;
       }
       let entries: AnnotationEntry[] = [];
       if (check.exists) {
-        if (!window.confirm(t('annotation.confirm.loadExisting'))) return;
+        if (!(await showConfirm(t('annotation.confirm.loadExisting')))) return;
         entries = await loadAnnotations(check.path, media);
       }
       onEnter(check.path, entries);
     } catch (e) {
-      alert(e instanceof Error ? e.message : t('annotation.alert.pathFailed'));
+      void showAlert(e instanceof Error ? e.message : t('annotation.alert.pathFailed'));
     } finally {
       setLoading(false);
     }

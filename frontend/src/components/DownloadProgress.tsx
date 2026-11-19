@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useI18n } from '../i18n';
+import { showConfirm } from '../dialog/store';
 import {
   cancelDownload,
   closeDownload,
@@ -33,9 +34,9 @@ function DownloadProgress() {
 
   const percent = Math.round((state.progress ?? 0) * 100);
 
-  const handleClose = () => {
+  const handleClose = async () => {
     if (active) {
-      if (!window.confirm(t('download.closeConfirm'))) return;
+      if (!(await showConfirm(t('download.closeConfirm')))) return;
       void cancelDownload();
     }
     closeDownload();

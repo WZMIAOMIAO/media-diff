@@ -16,9 +16,13 @@ export const DEFAULT_WATERMARK_STYLE: WatermarkStyle = {
  * Watermark state. Color and font size are a single global style shared by all
  * windows (persisted per mode); each window only owns its text.
  */
-export function useWatermark(storageKey: string) {
+export function useWatermark(storageKey: string, defaultOutline = true) {
   const [style, setStyleState] = useState<WatermarkStyle>(
-    () => loadWatermarkStyle(storageKey) ?? DEFAULT_WATERMARK_STYLE,
+    () =>
+      loadWatermarkStyle(storageKey, defaultOutline) ?? {
+        ...DEFAULT_WATERMARK_STYLE,
+        outline: defaultOutline,
+      },
   );
   const [texts, setTextsState] = useState<Record<number, string>>({});
 

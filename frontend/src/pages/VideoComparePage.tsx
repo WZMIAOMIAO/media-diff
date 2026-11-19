@@ -16,6 +16,7 @@ import { useVideoCompare } from '../hooks/video/useVideoCompare';
 import { useVideoPlayer } from '../hooks/video/useVideoPlayer';
 import { useWatermark } from '../hooks/useWatermark';
 import { VIDEO_WATERMARK_KEY } from '../utils/watermarkStorage';
+import { showAlert, showConfirm } from '../dialog/store';
 
 export default function VideoComparePage() {
   const { t, lang } = useI18n();
@@ -29,7 +30,7 @@ export default function VideoComparePage() {
   });
   const [histogramEnabled, setHistogramEnabled] = useState(false);
   const [colorPickerEnabled, setColorPickerEnabled] = useState(false);
-  const watermark = useWatermark(VIDEO_WATERMARK_KEY);
+  const watermark = useWatermark(VIDEO_WATERMARK_KEY, false);
   const [watermarkDialogOpen, setWatermarkDialogOpen] = useState(false);
   const [blindSetupOpen, setBlindSetupOpen] = useState(false);
   const [blindInfoOpen, setBlindInfoOpen] = useState(false);
@@ -58,14 +59,20 @@ export default function VideoComparePage() {
   // Sampling a playing video would require a synchronous GPU readback on every
   // frame (heavy with up to 4 windows), so the picker is disabled while playing.
   useEffect(() => {
-    if (player.isPlaying && colorPickerEnabled) setColorPickerEnabled(false);
+    if (player.isPlaying && colorPickerEnabled) {
+      setColorPickerEnabled(false);
+    }
   }, [player.isPlaying, colorPickerEnabled]);
 
-  const handleBlindToggle = () => {
+  const handleBlindToggle = async () => {
+    if (compare.wipe) {
+      void showAlert(t('wipe.exitFirst'));
+      return;
+    }
     if (compare.blind) {
       if (
         compare.blind.votedCount > 0 &&
-        !confirm(t('blind.exitConfirm'))
+        !(await showConfirm(t('blind.exitConfirm')))
       ) {
         return;
       }
@@ -74,36 +81,59 @@ export default function VideoComparePage() {
       return;
     }
     if (compare.annotation) {
-      alert(t('nav.alert.annotationBlindConflict'));
+      void showAlert(t('nav.alert.annotationBlindConflict'));
       return;
     }
     if (compare.selectedFolders.length < 2) {
-      alert(t('blind.needFolders'));
+      void showAlert(t('blind.needFolders'));
       return;
     }
     setBlindSetupOpen(true);
   };
 
   const handleAnnotationToggle = () => {
+    if (compare.wipe) {
+      void showAlert(t('wipe.exitFirst'));
+      return;
+    }
     if (compare.annotation) {
       compare.exitAnnotation();
       return;
     }
     if (compare.blind) {
-      alert(t('nav.alert.annotationBlindConflict'));
+      void showAlert(t('nav.alert.annotationBlindConflict'));
       return;
     }
     const count = compare.selectedFolders.length;
     if (count === 0) {
-      alert(t('annotation.needFolders'));
+      void showAlert(t('annotation.needFolders'));
       return;
     }
     if (count > 3) {
-      alert(t('annotation.tooManyFolders'));
+      void showAlert(t('annotation.tooManyFolders'));
       return;
     }
     player.pause();
     setAnnotationSetupOpen(true);
+  };
+
+  const handleWipeToggle = () => {
+    if (compare.wipe) {
+      player.pause();
+      compare.setWipe(false);
+      return;
+    }
+    if (compare.annotation || compare.blind) {
+      void showAlert(t('wipe.exitOtherFirst'));
+      return;
+    }
+    if (compare.selectedFolders.length !== 2) {
+      void showAlert(t('wipe.needTwoFolders'));
+      return;
+    }
+    player.pause();
+    setWatermarkDialogOpen(false);
+    compare.setWipe(true);
   };
 
   const handleMoveFolder = (from: number, to: number) => {
@@ -123,6 +153,8 @@ export default function VideoComparePage() {
         onAnnotationToggle={handleAnnotationToggle}
         blindActive={!!compare.blind}
         onBlindToggle={handleBlindToggle}
+        wipeActive={compare.wipe}
+        onWipeToggle={handleWipeToggle}
       />
       <div className="flex-1 flex min-h-0">
         <VideoSidebar compare={compare} onMoveFolder={handleMoveFolder} />
